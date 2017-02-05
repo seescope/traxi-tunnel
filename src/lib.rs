@@ -325,7 +325,7 @@ fn start_tunnel(environment: AndroidEnvironment, fd: c_int, uuid: String, file_p
 
 /// Upload the latest log to Amazon S3.
 #[no_mangle]
-pub extern fn Java_com_traxi_ToyVpnService_uploadReport(jre: *mut JNIEnv, _: jobject, path: jstring, uuid: jstring) {
+pub extern fn Java_com_traxichildapp_TraxiVPNService_uploadReport(jre: *mut JNIEnv, _: jobject, path: jstring, uuid: jstring) {
     init_logging();
 
     info!("UPLOAD_REPORT| uploadReport called.");
@@ -355,7 +355,7 @@ pub extern fn Java_com_traxi_ToyVpnService_uploadReport(jre: *mut JNIEnv, _: job
 
 /// Start the Traxi VPN service.
 #[no_mangle]
-pub extern fn Java_com_traxi_ToyVpnService_start(jre: *mut JNIEnv, thiz: jobject, fd: c_int, path: jstring, uuid: jstring) -> c_int {
+pub extern fn Java_com_traxichildapp_TraxiVPNService_start(jre: *mut JNIEnv, thiz: jobject, fd: c_int, path: jstring, uuid: jstring) -> c_int {
     init_logging();
 
     // Set up logging.
