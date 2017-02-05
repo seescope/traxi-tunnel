@@ -9,13 +9,13 @@ crate-type = ["rlib", "dylib"]
 
 [dependencies]
 libc = "0.2"
-pnet = { version = "0.13.0", path = "../../../../libpnet" }
+pnet = { version = "0.13.0", path = "../../libpnet" }
 rustc-serialize = "0.3.18"
 log = "0.3"
 jni-sys = "0.1.0"
 rand = "0.3"
-mio = { version = "0.5.1", path = "../../../../mio" }
-nix = { version = "0.5", path = "../../../../nix" }
+mio = { version = "0.5.1", path = "../../mio" }
+nix = { version = "0.5", path = "../../nix" }
 net2 = "0.2.23"
 ansi_term = "0.7"
 bytes  = "0.3.0"
@@ -33,7 +33,7 @@ fnv = "1.0.5"
 [dependencies.rusoto]
 version = "0.15.3"
 features = ["s3", "kinesis"]
-path = "../../../../rusoto"
+path = "../../rusoto"
 
 [target.'cfg(target_os="android")'.dependencies]
 android_logger = "0.2.2"
@@ -46,4 +46,4 @@ name = "test"
 path = "test/mod.rs"
 
 [replace]
-"Inflector:0.4.0" = { path = "../../../../inflector" }
+"Inflector:0.4.0" = { path = "../../inflector" }

@@ -8,7 +8,7 @@ use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 use std::net::Ipv4Addr;
 
-use libc::{mkfifo, open, c_int, O_RDWR, O_NONBLOCK, O_RDONLY};
+use libc::{open, c_int, O_RDWR, O_NONBLOCK, O_RDONLY};
 
 use mio::{EventLoop, Io, Token, EventSet};
 use mio::unix::UnixListener;
@@ -18,6 +18,13 @@ use tunnel::{TraxiTunnel, Environment};
 use tcp::session::{TCPSession, TCPState};
 use tcp::retransmission_timer::RetransmissionTimer;
 use app_logger::AppLogger;
+
+
+#[cfg(not(target_os="android"))]
+use libc::mkfifo;
+
+#[cfg(target_os="android")]
+fn mkfifo(_: *const u8, _: c_int) {}
 
 pub fn test_session() -> TCPSession {
     let test_source_ip = Ipv4Addr::new(192,168,1,112);
@@ -139,6 +146,11 @@ pub fn build_test_event_loop<T: Environment>() -> ((EventLoop<TraxiTunnel<T>>, T
     (event_loop, traxi_tunnel, fifo)
 }
 
+#[cfg(target_os="android")]
+pub fn init_logging() {
+}
+
+#[cfg(not(target_os="android"))]
 pub fn init_logging() {
     extern crate log4rs;
     drop(log4rs::init_file("config/test.yaml", Default::default()));
