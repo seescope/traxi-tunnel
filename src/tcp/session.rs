@@ -186,7 +186,7 @@ impl TCPSession {
                     TCPState::Established   => self.send_data(packet, event_loop),
                     ref invalid_state       => error!("SESSION {}| Got readable in {:?}! Doing nothing.", self.token.as_usize(), invalid_state),
                 }
-                
+
             },
             Ok(Some(_)) => {
                 debug!("SESSION READ {}| Read 0 bytes. Handling HUP.", self.token.as_usize());
@@ -333,7 +333,7 @@ impl TCPSession {
         let mut found_index = None;
         let initial_queue_size = self.read_queue.len();
 
-        // This logic is quite tricky. 
+        // This logic is quite tricky.
         //
         // To calculate the relative sequence number of each segment in the queue, we need to first take note
         // of the *current* sequence number.
@@ -428,7 +428,7 @@ impl TCPSession {
     pub fn update_retransmission_queue(&mut self, packet_acknowledgement: u32) {
         let initial_size = self.retransmission_queue.len();
         self.retransmission_queue.retain(|ref segment| {
-            !is_fully_acknowledged(packet_acknowledgement, segment.sequence_number, segment.len()) 
+            !is_fully_acknowledged(packet_acknowledgement, segment.sequence_number, segment.len())
         });
 
         let new_size = self.retransmission_queue.len();
@@ -486,7 +486,7 @@ impl TCPSession {
         }
     }
 
-    
+
     /// A valid segment should be RCV.NXT == SEG.SEQ.
     pub fn is_valid_segment(&self, packet_sequence_number: u32) -> bool {
         self.acknowledgement_number == packet_sequence_number
@@ -513,7 +513,7 @@ impl TCPSession {
     // Private Functions
 
     /// [RFC 5681 3.2](https://www.rfc-editor.org/rfc/pdfrfc/rfc5681.txt.pdf)
-	/// 3 duplicate ACKs (as defined in section 2, without any intervening ACKs which move SND.UNA) as an indication that a segment has been lost. 
+	/// 3 duplicate ACKs (as defined in section 2, without any intervening ACKs which move SND.UNA) as an indication that a segment has been lost.
     pub fn should_enter_fast_retransmit(&self) -> bool {
         let should_enter_fast_retransmit = self.duplicate_ack_count == 3;
         if should_enter_fast_retransmit {
@@ -528,7 +528,7 @@ impl TCPSession {
         let sequence_number = self.sequence_number;
         let segment = TCPSegment::new(data.clone(), sequence_number);
         let segment_length = segment.len() as u32;
-        
+
         // Add segment to retransmission queue.
         self.retransmission_queue.push_back(segment);
 
@@ -696,12 +696,11 @@ mod tests {
     use super::*;
     use tcp::segment::TCPSegment;
     use self::test::Bencher;
-    use mio::*;
     use tunnel::TraxiMessage;
     use std::collections::VecDeque;
     use test_utils::*;
 
-    struct TestHandler; 
+    struct TestHandler;
     impl Handler for TestHandler {
         type Timeout = TraxiMessage;
         type Message = TraxiMessage;
@@ -709,7 +708,7 @@ mod tests {
         fn ready(&mut self, _: &mut EventLoop<TestHandler>, _: Token, _: EventSet) { }
     }
 
-    #[test] 
+    #[test]
     fn test_build_tcp_session() {
         drop(log4rs::init_file("config/test.yaml", Default::default()));
         let test_packet = vec![0x45, 0x00,
@@ -790,7 +789,7 @@ mod tests {
 
         let expected_window_size = (test_window_size as u32) << window_scaling_factor;
         assert_eq!(test_session.receiver_window, expected_window_size);
-        
+
         // Make sure the window scaling factor is preserved, even if the next packet doesn't include
         // options.
         let mut next_packet = vec![0u8; 32];
@@ -806,7 +805,7 @@ mod tests {
         drop(log4rs::init_file("config/test.yaml", Default::default()));
         let mut test_session = test_session();
         let mut test_event_loop: EventLoop<TestHandler> = EventLoop::new().unwrap();
-        
+
         test_session.unacknowledged = 1;
 
         // Make sure unacknowledged is updated correctly.
@@ -918,7 +917,7 @@ mod tests {
     #[test]
     fn test_is_valid_segment() {
         let mut test_session = test_session();
-        test_session.acknowledgement_number = 10; 
+        test_session.acknowledgement_number = 10;
         let test_sequence_number = 10;
 
         // SEG.SEQ == RCV.NXT, so this is a valid segment.
