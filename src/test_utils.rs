@@ -101,7 +101,7 @@ impl Environment for FakeEnvironment {
 /// they work, take a look at [the Wikipedia article](https://en.wikipedia.org/wiki/Named_pipe) 
 pub unsafe fn build_test_fifo(nonblocking: bool) -> Io {
     let fifo_number = rand::random::<u32>();
-    let fifo_path_string = format!("/Users/kanerogers/test_fifo_{}", fifo_number);
+    let fifo_path_string = format!("/tmp/test_fifo_{}", fifo_number);
     let fifo_path = CString::new(fifo_path_string).unwrap();
     let fifo_path_ptr = fifo_path.as_ptr();
     mkfifo(fifo_path_ptr, 0o777);

@@ -5,6 +5,6 @@ appenders:
     encoder:
       pattern: "{M} - {h({l})} - {m}{n}"
 root:
-  level: none # Can be changed to debug tests.
+  level: debug # Can be changed to debug tests.
   appenders:
     - stdout
