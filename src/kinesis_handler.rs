@@ -1,7 +1,8 @@
 use std::result;
 use std::thread::{spawn, JoinHandle};
-use rusoto::{ProvideAwsCredentials, AwsCredentials, Region, AwsError};
+use rusoto::{ProvideAwsCredentials, AwsCredentials, Region, CredentialsError};
 use rusoto::kinesis::{KinesisClient, PutRecordsInput, PutRecordsRequestEntry, PutRecordsError, PutRecordsOutput};
+use rusoto::default_tls_client;
 
 type KinesisResult = Result<PutRecordsOutput, PutRecordsError>;
 use chrono::{Duration, UTC};
@@ -17,7 +18,7 @@ pub fn send_events(log_queue: Vec<(String, Vec<u8>)>) -> JoinHandle<Vec<KinesisR
     debug!("SEND_EVENTS| Sending {} events to Kinesis stream {}", log_queue.len(), stream_name);
 
     spawn(move || {
-        let client = KinesisClient::new(KinesisCredentials{}, Region::ApSoutheast2);
+        let client = KinesisClient::new(default_tls_client().unwrap(), KinesisCredentials{}, Region::ApSoutheast2);
         log_queue.clone().chunks(500).map(|chunk| {
             let records: Vec<PutRecordsRequestEntry> = chunk.to_vec().into_iter().map(|(UUID, data)| {
                 PutRecordsRequestEntry {
@@ -63,7 +64,7 @@ pub fn send_events(log_queue: Vec<(String, Vec<u8>)>) -> JoinHandle<Vec<KinesisR
 struct KinesisCredentials;
 
 impl ProvideAwsCredentials for KinesisCredentials {
-    fn credentials(&self) -> result::Result<AwsCredentials, AwsError> {
+    fn credentials(&self) -> result::Result<AwsCredentials, CredentialsError> {
         let access_key_id = "AKIAIG3LQD7SGZSJ75WQ";
         let secret_access_key = "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";
         let expiry_time = UTC::now() + Duration::seconds(600);

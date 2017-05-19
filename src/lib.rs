@@ -35,7 +35,6 @@ pub mod packet_helper;
 mod http_decoder;
 mod https_decoder;
 pub mod app_logger;
-mod log_archiver;
 mod firebase_connector;
 pub mod tcp;
 pub mod udp;
@@ -56,11 +55,9 @@ use jni_sys::{JNIEnv, jobject, jstring, jmethodID};
 use nix::fcntl::FcntlArg::F_SETFL;
 use nix::fcntl::{fcntl, O_NONBLOCK};
 use tunnel::{TraxiTunnel, Environment, TraxiMessage};
-use log_archiver::Archiver;
 use firebase_connector::{Firebase, FirebaseConnector};
-use rusoto::AwsError;
+use rusoto::CredentialsError;
 use zip::result::ZipError;
-use chrono::Local;
 
 const TUNNEL: mio::Token = mio::Token(0);
 const IPC: mio::Token = mio::Token(1); 
@@ -110,7 +107,7 @@ pub enum PacketError {
 pub enum TraxiError {
     Io(io::Error),
     Zip(ZipError),
-    AwsError(AwsError),
+    CredentialsError(CredentialsError),
     PacketError(PacketError),
     IPCError(String),
     TunnelError(String),
@@ -129,9 +126,9 @@ impl From<ZipError> for TraxiError {
     }
 }
 
-impl From<AwsError> for TraxiError {
-    fn from(err: AwsError) -> TraxiError {
-        TraxiError::AwsError(err)
+impl From<CredentialsError> for TraxiError {
+    fn from(err: CredentialsError) -> TraxiError {
+        TraxiError::CredentialsError(err)
     }
 }
 
@@ -322,36 +319,6 @@ fn start_tunnel(environment: AndroidEnvironment, fd: c_int, uuid: String, file_p
     info!("START_TUNNEL| Setup complete. Starting event loop.");
     event_loop.run(&mut handler).map_err(|e| TraxiError::from(e))
 }
-
-/// Upload the latest log to Amazon S3.
-#[no_mangle]
-pub extern fn Java_com_traxichildapp_TraxiVPNService_uploadReport(jre: *mut JNIEnv, _: jobject, path: jstring, uuid: jstring) {
-    init_logging();
-
-    info!("UPLOAD_REPORT| uploadReport called.");
-
-    // Build the log archiver.
-    let file_path = jstring_to_str(path, jre);
-    let uuid = jstring_to_str(uuid, jre);
-    let yesterday = Local::now() - chrono::Duration::hours(24);
-    let yesterday = yesterday.format("%Y-%m-%d");
-
-    let log_file_path = format!("{}/{}-{}.log", &file_path, yesterday, uuid);
-
-    debug!("UPLOAD_REPORT| Uploading with uuid {} and log_file_path {}.", &uuid, &log_file_path);
-
-    let log_archiver = Archiver::new(log_file_path.clone(), uuid);
-
-    // Upload the archive.
-    match log_archiver.upload().and_then(|()| std::fs::remove_file(&log_file_path).map_err(TraxiError::Io)) {
-        Ok(()) => info!("UPLOAD_REPORT| Succesfully uploaded report!"),
-        Err(e) => {
-            let message = format!("UPLOAD_REPORT| No logs to upload: {:?}. We'll try again later.", e);
-            error!("{}", &message);
-        }
-    }
-}
-
 
 /// Start the Traxi VPN service.
 #[no_mangle]
