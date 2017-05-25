@@ -30,6 +30,9 @@ zip = "0.1"
 chrono = "^0.2.21"
 fnv = "1.0.5"
 
+[replace]
+"native-tls:0.1.2" = { path = "../../rust-native-tls" }
+
 [dependencies.rusoto]
 version = "0.24"
 features = ["kinesis"]
