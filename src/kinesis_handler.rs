@@ -1,8 +1,8 @@
 use std::result;
 use std::thread::{spawn, JoinHandle};
-use rusoto::{ProvideAwsCredentials, AwsCredentials, Region, CredentialsError};
-use rusoto::kinesis::{KinesisClient, PutRecordsInput, PutRecordsRequestEntry, PutRecordsError, PutRecordsOutput};
-use rusoto::default_tls_client;
+use rusoto_credential::{ProvideAwsCredentials, AwsCredentials, CredentialsError};
+use rusoto_kinesis::{KinesisClient, PutRecordsInput, PutRecordsRequestEntry, PutRecordsError, PutRecordsOutput, Kinesis};
+use rusoto_core::{default_tls_client, Region};
 
 type KinesisResult = Result<PutRecordsOutput, PutRecordsError>;
 use chrono::{Duration, UTC};

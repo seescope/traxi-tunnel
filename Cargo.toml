@@ -29,13 +29,12 @@ hyper = "0.10"
 zip = "0.1"
 chrono = "^0.2.21"
 fnv = "1.0.5"
+rusoto_core = "0.26"
+rusoto_kinesis = "0.26"
+rusoto_credential = "0.7"
 
 [replace]
 "native-tls:0.1.2" = { path = "../../rust-native-tls" }
-
-[dependencies.rusoto]
-version = "0.24"
-features = ["kinesis"]
 
 [target.'cfg(target_os="android")'.dependencies]
 android_logger = "0.2.2"
