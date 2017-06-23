@@ -15,7 +15,7 @@ log = "0.3"
 jni-sys = "0.1.0"
 rand = "0.3"
 mio = { version = "0.5.1", path = "../../mio" }
-nix = { version = "0.5", path = "../../nix" }
+nix = { version = "0.5.1", path = "../../nix" }
 net2 = "0.2.23"
 ansi_term = "0.7"
 bytes  = "0.3.0"
