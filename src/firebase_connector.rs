@@ -1,5 +1,7 @@
 use super::{Result, TraxiError};
 use hyper::client::Client;
+use hyper::net::HttpsConnector;
+use hyper_native_tls::NativeTlsClient;
 
 pub trait FirebaseConnector {
     fn report_installed(&self) -> Result<()>;
@@ -18,7 +20,10 @@ impl Firebase {
 
 impl FirebaseConnector for Firebase {
     fn report_installed(&self) -> Result<()> {
-        let client = Client::new();
+        info!("In report_installed.");
+        let sslclient = NativeTlsClient::new().unwrap();
+        let connector = HttpsConnector::new(sslclient);
+        let client = Client::with_connector(connector);
 
         let url = format!("{}.json", self.base_url);
         client.patch(&url)
