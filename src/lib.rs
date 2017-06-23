@@ -28,7 +28,9 @@ extern crate rustc_serialize;
 extern crate zip;
 extern crate rand;
 extern crate chrono;
-extern crate rusoto;
+extern crate rusoto_core;
+extern crate rusoto_kinesis;
+extern crate rusoto_credential;
 extern crate fnv;
 
 pub mod tunnel;
@@ -57,7 +59,7 @@ use nix::fcntl::FcntlArg::F_SETFL;
 use nix::fcntl::{fcntl, O_NONBLOCK};
 use tunnel::{TraxiTunnel, Environment, TraxiMessage};
 use firebase_connector::{Firebase, FirebaseConnector};
-use rusoto::CredentialsError;
+use rusoto_core::CredentialsError;
 use zip::result::ZipError;
 
 const TUNNEL: mio::Token = mio::Token(0);
