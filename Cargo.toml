@@ -15,7 +15,7 @@ log = "0.3"
 jni-sys = "0.1.0"
 rand = "0.3"
 mio = { version = "0.5.1", path = "../../mio" }
-nix = { version = "0.5", path = "../../nix" }
+nix = { version = "0.5.1", path = "../../nix" }
 net2 = "0.2.23"
 ansi_term = "0.7"
 bytes  = "0.3.0"
@@ -25,15 +25,17 @@ byteorder = "0.5.1"
 regex = "0.1"
 time = "0.1.35"
 csv = "0.14.4"
-hyper = "0.8"
+hyper = "0.10"
+hyper-native-tls = "0.2"
 zip = "0.1"
 chrono = "^0.2.21"
 fnv = "1.0.5"
+rusoto_core = "0.26"
+rusoto_kinesis = "0.26"
+rusoto_credential = "0.7"
 
-[dependencies.rusoto]
-version = "0.15.3"
-features = ["s3", "kinesis"]
-path = "../../rusoto"
+[replace]
+"native-tls:0.1.2" = { path = "../../rust-native-tls" }
 
 [target.'cfg(target_os="android")'.dependencies]
 android_logger = "0.2.2"
@@ -44,6 +46,3 @@ log4rs = "0.5"
 [[test]]
 name = "test"
 path = "test/mod.rs"
-
-[replace]
-"Inflector:0.4.0" = { path = "../../inflector" }
