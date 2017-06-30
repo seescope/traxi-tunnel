@@ -88,7 +88,10 @@ impl TCPSession {
             None
         } else {
             let socket_addr = SocketAddr::new(IpAddr::V4(destination_ip), destination_port);
-            create_socket(&socket_addr, environment).ok()
+            match create_socket(&socket_addr, environment) {
+                Ok(s) => Some(s),
+                Err(e) => return Err(e),
+            }
         };
 
         let mss = tcp_header.get_options_iter()
@@ -598,9 +601,13 @@ impl TCPSession {
 fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> Result<TcpStream> {
     let socket = match TcpBuilder::new_v4() {
         Ok(socket)  => socket,
-        Err(e)      => {
-            panic!("Error creating socket: {:?}", e);
-        }
+        Err(e) => {
+            debug!("Encountered an error creating the socket: {:?}", e);
+            // Some sort of error creating the socket. In the wild, we've only seen this caused by
+            // the process running out of file descriptors, but we (un)wisely squelch all errors
+            // here.
+            return Err(e);
+        },
     };
 
     let stream = match socket.to_tcp_stream() {
