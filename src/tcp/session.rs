@@ -657,7 +657,10 @@ fn find_connection_string_in_file(file: Result<File>, connection_string: &str) -
         return None;
     }
 
-    let mut file = file.unwrap();
+    let mut file = match file {
+        Ok(e)  => e,
+        Err(_) => { return None; }
+    };
     let mut proc_file = String::new();
 
     if let Err(e) = file.read_to_string(&mut proc_file) {
