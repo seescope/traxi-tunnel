@@ -26,6 +26,8 @@ use packet_helper::{TCP, PacketType};
 use super::retransmission_timer::RetransmissionTimer;
 use super::segment::TCPSegment;
 use app_logger::AppLogger;
+use Result as TraxiTunnelResult;
+use TraxiError;
 
 
 #[derive(Debug, PartialEq)]
@@ -71,7 +73,7 @@ pub struct TCPSession {
 }
 
 impl TCPSession {
-    pub fn new<T: Environment>(packet: &[u8], environment: &T) -> Result<TCPSession> {
+    pub fn new<T: Environment>(packet: &[u8], environment: &T) -> TraxiTunnelResult<TCPSession> {
         let ip_header = Ipv4Packet::new(&packet[..]).unwrap();
         let tcp_header = TcpPacket::new(&ip_header.payload()[..]).unwrap();
 
@@ -598,7 +600,7 @@ impl TCPSession {
 
 // Functions.
 
-fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> Result<TcpStream> {
+fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> TraxiTunnelResult<TcpStream> {
     let socket = match TcpBuilder::new_v4() {
         Ok(socket)  => socket,
         Err(e) => {
@@ -606,21 +608,28 @@ fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> R
             // Some sort of error creating the socket. In the wild, we've only seen this caused by
             // the process running out of file descriptors, but we (un)wisely squelch all errors
             // here.
-            return Err(e);
+            return Err(TraxiError::from(e));
         },
     };
 
     let stream = match socket.to_tcp_stream() {
         Ok(stream)  => stream,
         Err(e)      => {
-            panic!("Error converting {:?} to stream: {:?}", socket, e);
+            debug!("Encountered an error converting {:?} to stream: {:?}; dropping SYN packet", socket, e);
+            return Err(TraxiError::from(e));
         }
     };
 
     let protected = environment.protect(stream.as_raw_fd());
-    assert!(protected, "!!!!WARNING: SOCKET COULD NOT BE PROTECTED!!!!");
+    if ! protected {
+        debug!("Could not protect the socket {:?}; dropping SYN packet", socket);
+        return Err(TraxiError::TunnelError("Unable to protect a socket".to_string()));
+    }
 
-    TcpStream::connect_stream(stream, socket_addr)
+    match TcpStream::connect_stream(stream, socket_addr) {
+        Ok(s)  => Ok(s),
+        Err(e) => Err(TraxiError::from(e)),
+    }
 }
 
 pub fn get_socket_uid(source_ip: Ipv4Addr, source_port: u16) -> Option<usize> {
