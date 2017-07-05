@@ -9,13 +9,13 @@ crate-type = ["rlib", "dylib"]
 
 [dependencies]
 libc = "0.2"
-pnet = { version = "0.13.0", path = "../../libpnet" }
+pnet = { version = "0.13.0", git = "ssh://git@bitbucket.org:22/kanerogers/libpnet.git",  branch="fixes"}
 rustc-serialize = "0.3.18"
 log = "0.3"
 jni-sys = "0.1.0"
 rand = "0.3"
-mio = { version = "0.5.1", path = "../../mio" }
-nix = { version = "0.5.1", path = "../../nix" }
+mio = { version = "0.5.1", git = "ssh://git@bitbucket.org:22/traxicorp/mio.git" }
+nix = { version = "0.5.1", git = "ssh://git@bitbucket.org:22/traxicorp/nix.git" }
 net2 = "0.2.23"
 ansi_term = "0.7"
 bytes  = "0.3.0"
@@ -35,7 +35,7 @@ rusoto_kinesis = "0.26"
 rusoto_credential = "0.7"
 
 [replace]
-"native-tls:0.1.2" = { path = "../../rust-native-tls" }
+"native-tls:0.1.2" = { git = "ssh://git@github.com:22/traxicorp/rust-native-tls" }
 
 [target.'cfg(target_os="android")'.dependencies]
 android_logger = "0.2.2"
