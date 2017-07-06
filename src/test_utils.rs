@@ -2,13 +2,11 @@ use rand;
 
 use std::collections::VecDeque;
 use std::io::prelude::*;
-use std::ffi::CString;
-use std::io::Error;
 use std::os::unix::io::AsRawFd;
 use std::time::Duration;
 use std::net::Ipv4Addr;
 
-use libc::{open, c_int, O_RDWR, O_NONBLOCK, O_RDONLY};
+use libc::c_int;
 
 use mio::{EventLoop, Io, Token, EventSet};
 use mio::unix::UnixListener;
@@ -22,9 +20,6 @@ use app_logger::AppLogger;
 
 #[cfg(not(target_os="android"))]
 use libc::mkfifo;
-
-#[cfg(target_os="android")]
-fn mkfifo(_: *const u8, _: c_int) {}
 
 pub fn test_session() -> TCPSession {
     let test_source_ip = Ipv4Addr::new(192,168,1,112);
@@ -98,14 +93,19 @@ impl Environment for FakeEnvironment {
 
 /// In order to replicate the VPN tunnel, our tests make use of a FIFO, an in-memory "pipe" that
 /// allows us to read and write from each end. For a detailed explanation on Named Pipes and how
-/// they work, take a look at [the Wikipedia article](https://en.wikipedia.org/wiki/Named_pipe) 
+/// they work, take a look at [the Wikipedia article](https://en.wikipedia.org/wiki/Named_pipe)
+#[cfg(not(target_os="android"))]
 pub unsafe fn build_test_fifo(nonblocking: bool) -> Io {
+    use std::ffi::CString;
+    use std::io::Error;
+    use libc::{open, O_RDWR, O_NONBLOCK, O_RDONLY};
+
     let fifo_number = rand::random::<u32>();
     let fifo_path_string = format!("/tmp/test_fifo_{}", fifo_number);
     let fifo_path = CString::new(fifo_path_string).unwrap();
     let fifo_path_ptr = fifo_path.as_ptr();
     mkfifo(fifo_path_ptr, 0o777);
-    
+
     let flags = if nonblocking { O_RDWR | O_NONBLOCK } else { O_RDONLY };
     let fd = open(fifo_path_ptr, flags);
 
@@ -114,6 +114,11 @@ pub unsafe fn build_test_fifo(nonblocking: bool) -> Io {
     }
 
     Io::from_raw_fd(fd)
+}
+
+#[cfg(target_os="android")]
+pub unsafe fn build_test_fifo(_: bool) -> Io {
+    Io::from_raw_fd(1)
 }
 
 /// Try reading from the FIFO pipe. Retry on failure.
