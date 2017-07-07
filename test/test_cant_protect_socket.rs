@@ -16,7 +16,7 @@ use libc::c_int;
 /// dropped.
 ///
 /// It is based heavily on test_rst.
-fn test_rst() {
+fn test_cant_protect_socket() {
     init_logging();
     let fake_env = FakeEnvironmentCantProtect;
     let (mut test_event_loop, mut test_traxi_tunnel, mut fifo) = build_test_event_loop_with_environment(fake_env);
