@@ -622,7 +622,10 @@ fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> T
 
     let protected = environment.protect(stream.as_raw_fd());
     if ! protected {
-        debug!("Could not protect the socket {:?}; dropping SYN packet", socket);
+        // FIXME - The following line causes test_cant_protect_socket to fail, because when it
+        // tries to print something inside socket, it .unwrap()s a None value.
+        // debug!("Could not protect the socket {:?}; dropping SYN packet", socket);
+        debug!("Could not protect the socket; dropping SYN packet");
         return Err(TraxiError::TunnelError("Unable to protect a socket".to_string()));
     }
 
