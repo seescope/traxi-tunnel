@@ -130,7 +130,15 @@ pub fn try_read_from_fifo<T: Environment>(fifo: &mut Io, buf: &mut [u8], test_ev
     }
 }
 
-pub fn build_test_event_loop<T: Environment>() -> ((EventLoop<TraxiTunnel<T>>, TraxiTunnel<FakeEnvironment>, Io)) {
+/// Wrapper function for build_test_event_loop_with_environment which constructs a "standard" fake
+/// environment and passes it straight on to b_t_e_l_with_environment (which is what all the tests
+/// which call this function expect to happen).
+pub fn build_test_event_loop() -> ((EventLoop<TraxiTunnel<FakeEnvironment>>, TraxiTunnel<FakeEnvironment>, Io)) {
+    let fake_environment = FakeEnvironment;
+    build_test_event_loop_with_environment(fake_environment)
+}
+
+pub fn build_test_event_loop_with_environment<T: Environment>(env: T) -> ((EventLoop<TraxiTunnel<T>>, TraxiTunnel<T>, Io)) {
     let test_tunnel = unsafe { build_test_fifo(true) };
     let fifo_fd = test_tunnel.as_raw_fd();
     let fifo = Io::from_raw_fd(fifo_fd);
@@ -139,8 +147,7 @@ pub fn build_test_event_loop<T: Environment>() -> ((EventLoop<TraxiTunnel<T>>, T
     let ipc_path = format!("/tmp/ipc_{}", socket_number);
     let ipc_server = UnixListener::bind(&ipc_path).unwrap();
 
-    let fake_environment = FakeEnvironment;
-    let traxi_tunnel = TraxiTunnel::new(test_tunnel, fake_environment, ipc_server);
+    let traxi_tunnel = TraxiTunnel::new(test_tunnel, env, ipc_server);
     let event_loop = EventLoop::new().unwrap();
 
     (event_loop, traxi_tunnel, fifo)

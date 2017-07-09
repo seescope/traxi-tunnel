@@ -159,9 +159,6 @@ impl Environment for AndroidEnvironment {
             let is_protected = (other_jre.CallBooleanMethod)(self.jre, self.thiz, protect,
                                                              socket);
 
-            // This should never fail, so panic if it does.
-            assert!(is_protected == 1, "Failed to protect socket!");
-
             is_protected == 1
         }
     }

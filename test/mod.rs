@@ -23,6 +23,7 @@ mod test_detect_transmission_loss;
 mod test_send_duplicate_acks;
 mod test_retransmission_timer;
 mod test_kinesis_handler;
+mod test_cant_protect_socket;
 
 pub use traxi::tunnel::*;
 pub use traxi::test_utils::*;
