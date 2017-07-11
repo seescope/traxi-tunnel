@@ -7,6 +7,7 @@
 #![allow(non_snake_case)]
 
 #[macro_use] extern crate log;
+#[macro_use] extern crate lazy_static;
 
 extern crate jni_sys;
 extern crate libc;

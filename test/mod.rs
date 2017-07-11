@@ -1,13 +1,18 @@
 extern crate traxi;
 
-#[macro_use] 
+#[macro_use]
 extern crate log;
+
+#[macro_use]
+extern crate lazy_static;
+
 extern crate log4rs;
 extern crate ansi_term;
 extern crate mio;
 extern crate libc;
 extern crate rand;
 extern crate pnet;
+extern crate rusoto_core;
 
 mod test_telnet_session;
 mod test_rst;
