@@ -59,7 +59,7 @@ pub fn handle_read_tcp<T: Environment>(
             session.app_logger.uuid = uuid;
 
             sessions.insert(token, session);
-        } 
+        }
 
         // This is a duplicate SYN for a session that we have already started. We can safely
         // discard it.
@@ -109,7 +109,7 @@ pub fn handle_read_tcp<T: Environment>(
             // Increment the sequence number.
             session.sequence_number += 1;
             debug!("TUNNEL S {}| Increment SEQ by 1 to {}", token.as_usize(), session.sequence_number);
-            
+
             // Now that we're established, flush the read queue.
             session.flush_read_queue(&mut event_loop);
         },
@@ -180,7 +180,7 @@ pub fn handle_read_tcp<T: Environment>(
                     if session.entered_fast_retransmit.is_some() && session.duplicate_ack_count % 3 == 0 {
                         session.retransmit_last_packet(&mut event_loop);
                     }
-                } 
+                }
 
                 TCP::Data(payload, _) => handle_data(payload, session, event_loop, token, tcp_header),
 
@@ -314,6 +314,13 @@ fn set_app_id_for_session<E: Environment>(session: &mut TCPSession, environment:
     }
 }
 
+fn is_domain (hostname: &str) -> bool {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"\w+").unwrap();
+    }
+    RE.is_match(hostname)
+}
+
 fn handle_connect<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(
     payload: Vec<u8>,
     mut session: &mut TCPSession,
@@ -344,10 +351,10 @@ fn handle_connect<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(
     let mut host = SocketAddr::new(ip, 443);
     let host_address = parse_domain(&host_address);
 
-    if Regex::new(r"\w+").unwrap().is_match(&host_address) {
+    if is_domain(&host_address) {
         // This is a domain. We need to resolve it.
         let mut lookup_result = try!(
-            net::lookup_host(&host_address).map_err(|e| 
+            net::lookup_host(&host_address).map_err(|e|
               PacketError::DropPacket(format!("Couldn't resolve {}: {:?}", host_address, e))
             )
         );
@@ -469,7 +476,7 @@ fn detect_retransmission(token: usize, tcp_header: &TcpPacket, session: &TCPSess
     ACKNOWLEDGEMENT {}", token, tcp_header.get_sequence(), tcp_header.get_acknowledgement(),
     session.sequence_number, session.acknowledgement_number);
 
-    if (session.state != TCPState::Closed && session.state != TCPState::SynSent) && 
+    if (session.state != TCPState::Closed && session.state != TCPState::SynSent) &&
        tcp_header.get_sequence() < session.acknowledgement_number {
            let error_message = format!("{} Received retransmission", token);
            Err(PacketError::DropPacket(error_message))
