@@ -23,7 +23,7 @@ use packet_helper::*;
 use tcp::packet_handler::{handle_write_tcp, handle_read_tcp};
 use udp::packet_handler::{handle_write_udp, handle_read_udp};
 use fnv::FnvHasher;
-use kinesis_handler::send_events;
+use kinesis_handler::KinesisHandler;
 
 pub type SessionMap = HashMap<Token, TCPSession>;
 pub type UDPSessionMap = HashMap<Token, UDPSession>;
@@ -53,6 +53,7 @@ pub struct TraxiTunnel<T> {
     ipc_server: UnixListener,
     ipc_client: Option<UnixStream>,
     log_queue: Vec<(String, Vec<u8>)>,
+    kinesis_handler: KinesisHandler,
 }
 
 impl<T: Environment> TraxiTunnel<T> {
@@ -71,6 +72,7 @@ impl<T: Environment> TraxiTunnel<T> {
             ipc_server: ipc_server,
             ipc_client: None,
             log_queue: Vec::new(),
+            kinesis_handler: KinesisHandler::new(),
         }
     }
 
@@ -79,7 +81,7 @@ impl<T: Environment> TraxiTunnel<T> {
         if self.write_queue.len() > 0 {
             let (packet, token) = self.write_queue.remove(0);
             let new_packet = match packet {
-                PacketType::TCP(tcp_packet) => try!(handle_write_tcp(tcp_packet, 
+                PacketType::TCP(tcp_packet) => try!(handle_write_tcp(tcp_packet,
                                                                 &mut self.tcp_sessions,
                                                                 token)),
                 PacketType::UDP(data)    => try!(handle_write_udp(data,
@@ -125,10 +127,10 @@ impl<T: Environment> TraxiTunnel<T> {
             Ok(Some(_)) => {
                 match self.process_packet(event_loop, &mut buf) {
                     Ok(token)   => debug!("TUNNEL {}| Packet for session {:?} succesfully processed.", token.as_usize(), token),
-                    Err(TraxiError::PacketError(PacketError::DropPacket(reason)))    => { 
+                    Err(TraxiError::PacketError(PacketError::DropPacket(reason)))    => {
                         error!("TUNNEL| Error processing packet: {}. Dropping.", reason);
                     },
-                    Err(TraxiError::PacketError(PacketError::RejectPacket(reason)))    => { 
+                    Err(TraxiError::PacketError(PacketError::RejectPacket(reason)))    => {
                         error!("TUNNEL| Error processing packet: {:?}. Rejecting packet and sending RST.", reason);
                         let packet = buf.bytes();
                         match get_packet_type(&packet[..]) {
@@ -242,7 +244,7 @@ impl<T: Environment> TraxiTunnel<T> {
         let mut buf = [0u8; 1];
         if let Some(ref mut client) = self.ipc_client {
             match client.try_read(&mut buf[..]) {
-                Ok(Some(r)) if r > 0  => { 
+                Ok(Some(r)) if r > 0  => {
                     let data = buf[0];
                     debug!("READ_IPC| Recevied message from IPC. Data is {}. Doing nothing.", data);
                     Ok(())
@@ -289,7 +291,7 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
 
         if events.is_writable() {
             let result = match token {
-                TUNNEL  => self.writable(event_loop), 
+                TUNNEL  => self.writable(event_loop),
                 _       => {
                     if let Some(tcp_session) = self.tcp_sessions.get_mut(&token) {
                         tcp_session.writable(event_loop).map_err(|e| TraxiError::from(e))
@@ -375,10 +377,10 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
                 // Before we do *anything*, set the timer again.
                 let flush_log_timeout = Duration::from_millis(1000); // 1 second
                 drop(event_loop.timeout(TraxiMessage::FlushLogQueue, flush_log_timeout)); // Drop, since timeout should never fail.
-                
+
                 let queue_size = self.log_queue.len();
-                debug!("FLUSH_LOG_QUEUE| Sending {} events to Kinesis.", queue_size); 
-                send_events(self.log_queue.clone());
+                debug!("FLUSH_LOG_QUEUE| Sending {} events to Kinesis.", queue_size);
+                self.kinesis_handler.send_events(self.log_queue.clone());
 
                 self.log_queue = Vec::new();
             }
@@ -505,4 +507,3 @@ mod test {
         });
     }
 }
-
