@@ -384,6 +384,20 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
 
                 self.log_queue = Vec::new();
             }
+            TraxiMessage::DumpSessionMap => {
+                // Before we do *anything*, set the timer again.
+                let timeout = Duration::from_secs(300); // 5 Minutes
+                drop(event_loop.timeout(TraxiMessage::DumpSessionMap, timeout)); // Drop, since timeout should never fail.
+
+                info!("SESSION_DUMP| TOTAL_SESSIONS: {}", self.tcp_sessions.len());
+
+                for session in self.tcp_sessions.values() {
+                    info!(
+                        "SESSION_DUMP| {:?}: CREATED_AT: {} | LAST_ACTIVE: {} | SOURCE: {} | DESINATION: {}",
+                        session.token, session.created_at, session.last_active, session.source_ip, session.destination_ip
+                    );
+                }
+            }
             ref unsupported                   => {
                 error!("TIMEOUT| Received unknown message {:?}", unsupported);
             }
@@ -395,7 +409,7 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
 /// needs a way to communicate with the tunnel. It does this through the form of `Messages`.
 /// `Messages` work by placing data on the event queue, calling `TraxiTunnel`'s `#notify` method
 /// when it's ready. This is the enum used for that communication.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TraxiMessage {
     /// The remote `Session` has a packet ready to be sent back to the tunnel.
     QueuePacket(PacketType, Token),
@@ -414,6 +428,9 @@ pub enum TraxiMessage {
 
     /// Append a byte-encoded, tab separated log string to the LogQueue.
     AppendToLogQueue((String, Vec<u8>)),
+
+    /// Write the SessionMap to disk.
+    DumpSessionMap,
 
     /// Flush the LogQueue.
     FlushLogQueue,

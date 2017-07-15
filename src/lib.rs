@@ -64,7 +64,7 @@ use rusoto_core::CredentialsError;
 use zip::result::ZipError;
 
 const TUNNEL: mio::Token = mio::Token(0);
-const IPC: mio::Token = mio::Token(1); 
+const IPC: mio::Token = mio::Token(1);
 #[cfg(all(target_os="android", debug_assertions))]
 fn init_logging() {
     use log::LogLevel;
@@ -224,7 +224,7 @@ fn get_method_id(env: *mut JNIEnv, thiz: jobject, method_name: &str, method_sign
         let method_signature_ptr  = method_signature.as_ptr();
 
         // Get the corresponding class for "thiz".
-        let class = (other_jre.GetObjectClass)(env, thiz); 
+        let class = (other_jre.GetObjectClass)(env, thiz);
 
         // Get the method ID
         let method_id = (other_jre.GetMethodID)(env, class, method_name_ptr, method_signature_ptr);
@@ -316,6 +316,11 @@ fn start_tunnel(environment: AndroidEnvironment, fd: c_int, uuid: String, file_p
     let flush_log_timeout = Duration::from_millis(1000); // 1 second
     drop(event_loop.timeout(TraxiMessage::FlushLogQueue, flush_log_timeout)); // Drop, since timeout should never fail.
     info!("START_TUNNEL| Set FlushLogQueue timer to 1 second.");
+
+    // FIXME: Added for debug. Remove before releasing to clients!
+    let dump_sessions_timeout = Duration::from_secs(300); // 5 minutes
+    drop(event_loop.timeout(TraxiMessage::DumpSessionMap, dump_sessions_timeout)); // Drop, since timeout should never fail.
+    info!("START_TUNNEL| Set DumpSessionMap timer to 5 minutes.");
 
     info!("START_TUNNEL| Setup complete. Starting event loop.");
     event_loop.run(&mut handler).map_err(|e| TraxiError::from(e))
