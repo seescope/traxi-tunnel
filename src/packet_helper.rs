@@ -49,7 +49,7 @@ pub fn build_tcp_packet(tcp_session: &TCPSession, flags: u16, payload: Option<&[
         new_ip_header.set_source(tcp_session.destination_ip); // Flipped from original.
         new_ip_header.set_destination(tcp_session.source_ip); // Flipped from original.
         new_ip_header.set_next_level_protocol(IpNextHeaderProtocols::Tcp);
-        
+
         let checksum = ipv4::checksum(&new_ip_header.to_immutable());
         new_ip_header.set_checksum(checksum);
     }
@@ -58,7 +58,7 @@ pub fn build_tcp_packet(tcp_session: &TCPSession, flags: u16, payload: Option<&[
         let mut new_tcp_header = MutableTcpPacket::new(&mut new_packet[IP_HEADER_LENGTH..]).unwrap();
         new_tcp_header.set_source(tcp_session.destination_port); // Flipped from original.
         new_tcp_header.set_destination(tcp_session.source_port); // Flipped from original.
-        
+
         if let Some(sequence_number) = sequence_number {
             new_tcp_header.set_sequence(sequence_number);
         } else {
@@ -76,12 +76,12 @@ pub fn build_tcp_packet(tcp_session: &TCPSession, flags: u16, payload: Option<&[
         new_tcp_header.set_flags(flags);
         new_tcp_header.set_window(14656);
         new_tcp_header.set_urgent_ptr(0x0000);
-        
+
         let options = vec![
             TcpOption::mss(1460),
             TcpOption::wscale(6),
             TcpOption::nop(),
-        ]; 
+        ];
 
         new_tcp_header.set_options(&options);
 
@@ -99,7 +99,7 @@ pub fn build_tcp_packet(tcp_session: &TCPSession, flags: u16, payload: Option<&[
     new_packet
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum TCP {
     Data(Vec<u8>, u32), // Payload, SEQ
     ACK(u32), // SEQ
@@ -110,7 +110,7 @@ pub enum TCP {
 }
 
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum PacketType {
     TCP(TCP),
     UDP(Vec<u8>),
@@ -187,7 +187,7 @@ pub fn build_udp_packet(data: Vec<u8>, udp_session: &UDPSession) -> Vec<u8> {
         new_ip_header.set_source(udp_session.destination_ip); // Flipped from original.
         new_ip_header.set_destination(udp_session.source_ip); // Flipped from original.
         new_ip_header.set_next_level_protocol(IpNextHeaderProtocols::Udp);
-        
+
         let checksum = ipv4::checksum(&new_ip_header.to_immutable());
         new_ip_header.set_checksum(checksum);
     }
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(tcp_header.get_destination(), test_session.source_port); // Should be flipped.
         assert_eq!(tcp_header.get_acknowledgement(), test_session.acknowledgement_number); // Should be incremeneted
         assert_eq!(tcp_header.get_sequence(), test_sequence_number); // Should be remote
-        assert_eq!(tcp_header.get_flags(), TcpFlags::ACK); 
+        assert_eq!(tcp_header.get_flags(), TcpFlags::ACK);
         assert_eq!(tcp_header.payload(), &expected_payload[..]);
     }
 
@@ -281,8 +281,8 @@ mod tests {
         assert_eq!(ip_header.get_destination(), test_session.source_ip); // Should be flipped.
         assert_eq!(tcp_header.get_source(), test_session.destination_port); // Should be flipped.
         assert_eq!(tcp_header.get_destination(), test_session.source_port); // Should be flipped.
-        assert_eq!(tcp_header.get_sequence(), test_sequence_number); 
-        assert_eq!(tcp_header.get_acknowledgement(), test_session.acknowledgement_number); 
+        assert_eq!(tcp_header.get_sequence(), test_sequence_number);
+        assert_eq!(tcp_header.get_acknowledgement(), test_session.acknowledgement_number);
         assert_eq!(tcp_header.get_flags(), TcpFlags::ACK); // Should be ACK
         assert_eq!(tcp_header.get_checksum(), 64522);
     }
@@ -300,8 +300,8 @@ mod tests {
         assert_eq!(ip_header.get_destination(), test_session.source_ip); // Should be flipped.
         assert_eq!(tcp_header.get_source(), test_session.destination_port); // Should be flipped.
         assert_eq!(tcp_header.get_destination(), test_session.source_port); // Should be flipped.
-        assert_eq!(tcp_header.get_sequence(), test_session.sequence_number); 
-        assert_eq!(tcp_header.get_acknowledgement(), test_session.acknowledgement_number); 
+        assert_eq!(tcp_header.get_sequence(), test_session.sequence_number);
+        assert_eq!(tcp_header.get_acknowledgement(), test_session.acknowledgement_number);
         assert_eq!(tcp_header.get_flags(), TcpFlags::FIN | TcpFlags::ACK); // Should be FIN/ACK
         assert_eq!(tcp_header.get_checksum(), 64563);
     }
@@ -316,7 +316,7 @@ mod tests {
         let tcp_header = TcpPacket::new(&ip_header.payload()[..]).unwrap();
 
         assert_eq!(tcp_header.get_acknowledgement(), 0);
-        
+
         let flags = tcp_header.get_flags();
         assert_eq!(flags, TcpFlags::RST);
     }
