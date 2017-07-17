@@ -64,7 +64,7 @@ use rusoto_core::CredentialsError;
 use zip::result::ZipError;
 
 const TUNNEL: mio::Token = mio::Token(0);
-const IPC: mio::Token = mio::Token(1); 
+const IPC: mio::Token = mio::Token(1);
 #[cfg(all(target_os="android", debug_assertions))]
 fn init_logging() {
     use log::LogLevel;
@@ -224,7 +224,7 @@ fn get_method_id(env: *mut JNIEnv, thiz: jobject, method_name: &str, method_sign
         let method_signature_ptr  = method_signature.as_ptr();
 
         // Get the corresponding class for "thiz".
-        let class = (other_jre.GetObjectClass)(env, thiz); 
+        let class = (other_jre.GetObjectClass)(env, thiz);
 
         // Get the method ID
         let method_id = (other_jre.GetMethodID)(env, class, method_name_ptr, method_signature_ptr);
