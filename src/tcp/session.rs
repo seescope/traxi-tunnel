@@ -21,11 +21,15 @@ use net2::TcpBuilder;
 
 use rand::random;
 
+use chrono::{DateTime, UTC};
+
+use super::retransmission_timer::RetransmissionTimer;
+use super::inactive_session_timer::InactiveSessionTimer;
+use super::segment::TCPSegment;
 use tunnel::{TraxiMessage, Environment, get_socket_token};
 use packet_helper::{TCP, PacketType};
-use super::retransmission_timer::RetransmissionTimer;
-use super::segment::TCPSegment;
 use app_logger::AppLogger;
+
 use Result as TraxiTunnelResult;
 use TraxiError;
 
@@ -68,8 +72,11 @@ pub struct TCPSession {
     pub slow_start_threshold: u32,
     pub entered_fast_retransmit: Option<u32>, // NewReno recover
     pub retransmission_timer: RetransmissionTimer,
+    pub inactive_session_timer: InactiveSessionTimer,
     pub last_acknowledgement: u32,
     pub app_logger: AppLogger,
+    pub created_at: DateTime<UTC>,
+    pub last_active: DateTime<UTC>,
 }
 
 impl TCPSession {
@@ -114,6 +121,7 @@ impl TCPSession {
         };
 
         let app_logger = AppLogger::new(environment.get_file_path(), destination_ip);
+        let token = get_socket_token(packet);
 
         Ok(TCPSession {
             source_ip: source_ip,
@@ -127,7 +135,7 @@ impl TCPSession {
             unacknowledged: sequence_number,
             congestion_window: initial_window_size,
             receiver_window: receiver_window,
-            token: get_socket_token(packet),
+            token: token.clone(),
             interest: EventSet::readable(),
             mut_buf: Some(ByteBuf::mut_with_capacity(8192)),
             read_queue: VecDeque::with_capacity(10),
@@ -140,12 +148,19 @@ impl TCPSession {
             slow_start_threshold: initial_window_size,
             entered_fast_retransmit: None,
             retransmission_timer: RetransmissionTimer::new(),
+            inactive_session_timer: InactiveSessionTimer::new(token),
             last_acknowledgement: 0,
             app_logger: app_logger,
+            created_at: UTC::now(),
+            last_active: UTC::now(),
         })
     }
 
     pub fn writable<H: Handler<Message = TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
+        // Session bookkeeping.
+        self.last_active = UTC::now();
+        self.inactive_session_timer.restart_timer(event_loop);
+
         while self.write_queue.len() > 0 {
             let packet = self.write_queue.remove(0);
             let mut socket = self.socket.take().unwrap();
@@ -168,6 +183,10 @@ impl TCPSession {
     }
 
     pub fn readable<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
+        // Session bookkeeping.
+        self.last_active = UTC::now();
+        self.inactive_session_timer.restart_timer(event_loop);
+
         // Prepare a buffer to read the data.
         let mut buf = self.mut_buf.take().unwrap_or(ByteBuf::mut_with_capacity(8192));
         buf.clear();

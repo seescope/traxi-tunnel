@@ -1,6 +1,6 @@
 [package]
 name = "traxi"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Kane Rogers <kane.m.rogers@gmail.com>"]
 
 [lib]
@@ -36,7 +36,7 @@ rusoto_credential = "0.7"
 lazy_static = "0.2.8"
 
 [replace]
-"native-tls:0.1.2" = { git = "ssh://git@github.com:22/traxicorp/rust-native-tls" }
+"native-tls:0.1.4" = { git = "ssh://git@github.com:22/traxicorp/rust-native-tls" }
 
 [target.'cfg(target_os="android")'.dependencies]
 android_logger = "0.2.2"

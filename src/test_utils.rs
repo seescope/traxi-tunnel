@@ -15,7 +15,10 @@ use mio::tcp::TcpStream;
 use tunnel::{TraxiTunnel, Environment};
 use tcp::session::{TCPSession, TCPState};
 use tcp::retransmission_timer::RetransmissionTimer;
+use tcp::inactive_session_timer::InactiveSessionTimer;
 use app_logger::AppLogger;
+
+use chrono::UTC;
 
 
 #[cfg(not(target_os="android"))]
@@ -56,8 +59,11 @@ pub fn test_session() -> TCPSession {
         slow_start_threshold: 9999,
         entered_fast_retransmit: None,
         retransmission_timer: RetransmissionTimer::new(),
+        inactive_session_timer: InactiveSessionTimer::new(Token(1)),
         last_acknowledgement: 0,
         app_logger: AppLogger::new("./".to_string(), test_destination_ip),
+        created_at: UTC::now(),
+        last_active: UTC::now(),
     }
 }
 
