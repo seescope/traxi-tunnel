@@ -3,6 +3,7 @@ use rusoto_core::signature::SignedRequest;
 
 use traxi::kinesis_handler::KinesisHandler;
 use traxi::test_utils::init_logging;
+use traxi::log_entry::LogEntry;
 
 use std::sync::{Mutex};
 use std::{thread, time, io};
@@ -25,13 +26,30 @@ fn test_kinesis_handler() {
 
     // Kinesis has a hard limit of 500 records per request, so we want to make sure that we make
     // two separate calls.
-    for _ in 0..500 {
-        events.push(("abc-123".to_string(), vec!(0u8)));
+    for i in 0..500 {
+        events.push({
+            LogEntry {
+                uuid: "abc-123".to_string(),
+                destination: "somewhere".to_string(),
+                app_id: format!("{}", i),
+                bytes: 0,
+                timestamp: "something".to_string(),
+            }
+        });
     }
 
-    for _ in 0..500 {
-        events.push(("abc-456".to_string(), vec!(0u8)));
+    for i in 0..500 {
+        events.push({
+            LogEntry {
+                uuid: "abc-456".to_string(),
+                destination: "somewhere".to_string(),
+                app_id: format!("{}", i),
+                bytes: 0,
+                timestamp: "something".to_string(),
+            }
+        });
     }
+
 
     let kinesis_handler = KinesisHandler::new_with_tls_client(MockDispatcher);
 

@@ -61,7 +61,7 @@ pub fn test_session() -> TCPSession {
         retransmission_timer: RetransmissionTimer::new(),
         inactive_session_timer: InactiveSessionTimer::new(Token(1)),
         last_acknowledgement: 0,
-        app_logger: AppLogger::new("./".to_string(), test_destination_ip),
+        app_logger: AppLogger::new(test_destination_ip),
         created_at: UTC::now(),
         last_active: UTC::now(),
     }

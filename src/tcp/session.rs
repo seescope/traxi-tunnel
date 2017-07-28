@@ -120,7 +120,7 @@ impl TCPSession {
             window
         };
 
-        let app_logger = AppLogger::new(environment.get_file_path(), destination_ip);
+        let app_logger = AppLogger::new(destination_ip);
         let token = get_socket_token(packet);
 
         Ok(TCPSession {
