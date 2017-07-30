@@ -25,7 +25,8 @@ fn test_kinesis_handler() {
     let mut events = Vec::new();
 
     // Kinesis has a hard limit of 500 records per request, so we want to make sure that we make
-    // two separate calls.
+    // two separate calls. Make sure each entry is unique to prevent consolidate_log_entries from
+    // reducing the queue size.
     for i in 0..500 {
         events.push({
             LogEntry {
@@ -55,7 +56,7 @@ fn test_kinesis_handler() {
 
     kinesis_handler.send_events(events);
 
-    thread::sleep(time::Duration::from_millis(1000));
+    thread::sleep(time::Duration::from_millis(500));
 
 
     assert_eq!(*REQUESTS.lock().unwrap(), 2);

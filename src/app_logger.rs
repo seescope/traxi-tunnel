@@ -47,10 +47,12 @@ impl AppLogger {
     }
 
     pub fn log_response(&mut self, response_size: usize, sender: &Sender<TraxiMessage>) {
+        debug!("|LOG_RESPONSE| {:?} - {}", self, response_size);
         // We only log if we've transferred more than 1 byte.
         if response_size < 1 {
             return;
         }
+
 
         // Only log requests that have an app ID
         if self.app_id.is_none() {
@@ -74,6 +76,8 @@ impl AppLogger {
             bytes: response_size,
             destination: self.destination.clone(),
         };
+
+        debug!("|LOG_RESPONSE| Sending LogEntry: {:?}", log_entry);
 
         let log_message = TraxiMessage::AppendToLogQueue(log_entry);
         drop(sender.send(log_message)); // Drop here as send should NEVER fail.

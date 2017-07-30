@@ -1,6 +1,6 @@
 use std::result;
 use std::sync::mpsc::{Sender, channel};
-use std::{thread, time};
+use std::{thread};
 
 use rusoto_credential::{ProvideAwsCredentials, AwsCredentials, CredentialsError};
 use rusoto_kinesis::{KinesisClient, PutRecordsInput, PutRecordsRequestEntry, Kinesis};
@@ -19,7 +19,7 @@ type LogQueue = Vec<LogEntry>;
 fn send_events<D: DispatchSignedRequest>(client: &KinesisClient<KinesisCredentials, D>, log_queue: LogQueue) -> () {
     let stream_name = stream_name();
 
-    debug!("SEND_EVENTS| Sending {} events to Kinesis stream {}", log_queue.len(), stream_name);
+    debug!("SEND_EVENTS| Sending {} events to Kinesis stream: {:?}", log_queue.len(), log_queue);
 
     // AWS will *SILENTLY_DROP* records after 500. Send in chunks of 500 to get around this.
     for chunk in log_queue.chunks(500) {
@@ -32,6 +32,7 @@ fn send_events<D: DispatchSignedRequest>(client: &KinesisClient<KinesisCredentia
                 partition_key: log_entry.uuid,
             }
         }).collect();
+
 
         let put_records_input = PutRecordsInput {
             records: records,
@@ -84,12 +85,8 @@ impl KinesisHandler {
         // Create a worker thread that takes ownership of the `Receiver` and `client`.
         thread::spawn(move || {
             let client = KinesisClient::new(client, KinesisCredentials{}, Region::ApSoutheast2);
-
-            // Receive messages from the main thread, sleeping for a second between cycles.
-            loop {
-                let log_queue = rx.recv().unwrap();
+            for log_queue in rx {
                 send_events(&client, log_queue);
-                thread::sleep(time::Duration::from_millis(1000));
             }
         });
 

@@ -380,7 +380,7 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
                 let flush_log_timeout = Duration::from_millis(1000); // 1 second
                 drop(event_loop.timeout(TraxiMessage::FlushLogQueue, flush_log_timeout)); // Drop, since timeout should never fail.
 
-                debug!("FLUSH_LOG_QUEUE| Sending events to Kinesis.");
+                debug!("FLUSH_LOG_QUEUE| Sending events to Kinesis. Log Queue: {:?}", self.log_queue);
                 self.kinesis_handler.send_events(self.log_queue.clone());
 
                 self.log_queue = Vec::new();
