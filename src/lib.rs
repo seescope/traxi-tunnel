@@ -33,6 +33,7 @@ extern crate rusoto_core;
 extern crate rusoto_kinesis;
 extern crate rusoto_credential;
 extern crate fnv;
+extern crate itertools;
 
 pub mod tunnel;
 pub mod packet_helper;
@@ -44,6 +45,7 @@ pub mod tcp;
 pub mod udp;
 pub mod test_utils;
 pub mod kinesis_handler;
+pub mod log_entry;
 
 use std::os::unix::io::AsRawFd;
 use std::ffi::{CString, CStr};

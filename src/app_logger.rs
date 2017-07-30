@@ -2,24 +2,23 @@ use std::net::Ipv4Addr;
 use std::collections::HashMap;
 use http_decoder;
 use https_decoder;
-use chrono::Local;
+use chrono::UTC;
 use mio::Sender;
 use tunnel::TraxiMessage;
+use log_entry::LogEntry;
 
 pub type DomainMap = HashMap<Ipv4Addr, String>;
 
 #[derive(Debug)]
 pub struct AppLogger {
-    pub log_file_path: String,
     pub uuid: Option<String>,
     pub app_id: Option<String>,
     pub destination: String,
 }
 
 impl AppLogger {
-    pub fn new(log_file_path: String, destination: Ipv4Addr) -> AppLogger {
+    pub fn new(destination: Ipv4Addr) -> AppLogger {
         AppLogger {
-            log_file_path: log_file_path,
             destination: format!("{}", destination),
             uuid: None,
             app_id: None,
@@ -48,8 +47,15 @@ impl AppLogger {
     }
 
     pub fn log_response(&mut self, response_size: usize, sender: &Sender<TraxiMessage>) {
+        debug!("|LOG_RESPONSE| {:?} - {}", self, response_size);
         // We only log if we've transferred more than 1 byte.
         if response_size < 1 {
+            return;
+        }
+
+
+        // Only log requests that have an app ID
+        if self.app_id.is_none() {
             return;
         }
 
@@ -59,23 +65,22 @@ impl AppLogger {
         let default_uuid = "traxi".to_string();
         let uuid = self.uuid.as_ref().unwrap_or(&default_uuid);
 
-        let now = Local::now();
+        let now = UTC::now();
         let timestamp = now.to_rfc3339();
 
-        // Build the log string.
-        let log_string = format!("{}\t{}\t{}\t{}\n",
-                                timestamp,
-                                self.destination,
-                                response_size,
-                                app_id_string);
+        // Build the LogEntry
+        let log_entry = LogEntry {
+            uuid: uuid.clone(),
+            app_id: app_id_string.clone(),
+            timestamp: timestamp,
+            bytes: response_size,
+            destination: self.destination.clone(),
+        };
 
-        let log_bytes = log_string.as_bytes();
+        debug!("|LOG_RESPONSE| Sending LogEntry: {:?}", log_entry);
 
-        // Only log requests that have an app ID
-        if let Some(_) = self.app_id {
-            let log_message = TraxiMessage::AppendToLogQueue((uuid.clone(), log_bytes.to_vec()));
-            drop(sender.send(log_message)); // Drop here as send should NEVER fail.
-        }
+        let log_message = TraxiMessage::AppendToLogQueue(log_entry);
+        drop(sender.send(log_message)); // Drop here as send should NEVER fail.
     }
 }
 
@@ -90,15 +95,13 @@ mod tests {
     use tunnel::{TraxiMessage};
 
     struct TestHandler {
-        ReceivedUUID: String,
-        ReceivedLog: String,
+        ReceivedEntry: Option<LogEntry>
     }
 
     impl TestHandler {
         fn new() -> TestHandler {
             TestHandler {
-                ReceivedUUID: "".to_string(),
-                ReceivedLog: "".to_string(),
+                ReceivedEntry: None
             }
         }
     }
@@ -109,11 +112,8 @@ mod tests {
 
         fn notify(&mut self, _: &mut EventLoop<TestHandler>, msg: TraxiMessage) {
             match msg {
-                TraxiMessage::AppendToLogQueue((uuid, log_vector)) => {
-                    self.ReceivedUUID = uuid.clone();
-                    self.ReceivedLog = String::from_utf8(log_vector).unwrap().clone();
-
-                    println!("Got log {}", self.ReceivedLog)
+                TraxiMessage::AppendToLogQueue(log_entry) => {
+                    self.ReceivedEntry = Some(log_entry);
                 }
                 _ => {}
             }
@@ -180,22 +180,23 @@ mod tests {
         let expected_domain = "www.fairfaxstatic.com.au";
         let expected_app_id = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/54.0.2840.98 Safari/537.36";
         let test_uuid = "test_log_http";
-        let mut app_logger = AppLogger::new("./".to_string(), test_ip);
+        let mut app_logger = AppLogger::new(test_ip);
 
         app_logger.set_domain(&http_request_with_user_agent, 80);
 		app_logger.set_app_id(&http_request_with_user_agent);
         app_logger.uuid = Some(test_uuid.to_string());
 
 
-        let (log_string, uuid) = test_app_logger(&mut app_logger);
+        let log_entry = test_app_logger(&mut app_logger);
+        let log_string = String::from_utf8(log_entry.into_kinesis()).unwrap();
         assert!(log_string.contains(expected_domain));
         assert!(log_string.contains(expected_app_id));
-        assert!(uuid == test_uuid);
+        assert!(log_entry.uuid == test_uuid);
     }
 
     // Test Helpers
 
-    fn test_app_logger(app_logger: &mut AppLogger) -> (String, String) {
+    fn test_app_logger(app_logger: &mut AppLogger) -> (LogEntry) {
         let mut event_loop = test_event_loop();
         let mut test_handler = TestHandler::new();
         app_logger.log_response(9001, &event_loop.channel());
@@ -203,7 +204,7 @@ mod tests {
             drop(event_loop.run_once(&mut test_handler, None));
         }
 
-        (test_handler.ReceivedLog.clone(), test_handler.ReceivedUUID.clone())
+        (test_handler.ReceivedEntry.clone().unwrap())
     }
 
     fn test_event_loop() -> EventLoop<TestHandler> {

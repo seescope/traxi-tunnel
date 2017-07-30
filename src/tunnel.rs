@@ -17,13 +17,15 @@ use mio::unix::{UnixListener, UnixStream};
 
 use bytes::{ByteBuf, MutByteBuf};
 
+use fnv::FnvHasher;
+
 use tcp::session::{TCPSession};
 use udp::session::UDPSession;
 use packet_helper::*;
 use tcp::packet_handler::{handle_write_tcp, handle_read_tcp};
 use udp::packet_handler::{handle_write_udp, handle_read_udp};
-use fnv::FnvHasher;
 use kinesis_handler::KinesisHandler;
+use log_entry::LogEntry;
 
 pub type SessionMap = HashMap<Token, TCPSession>;
 pub type UDPSessionMap = HashMap<Token, UDPSession>;
@@ -52,7 +54,7 @@ pub struct TraxiTunnel<T> {
     mut_buf: Option<MutByteBuf>,
     ipc_server: UnixListener,
     ipc_client: Option<UnixStream>,
-    log_queue: Vec<(String, Vec<u8>)>,
+    log_queue: Vec<LogEntry>,
     kinesis_handler: KinesisHandler,
 }
 
@@ -378,8 +380,7 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
                 let flush_log_timeout = Duration::from_millis(1000); // 1 second
                 drop(event_loop.timeout(TraxiMessage::FlushLogQueue, flush_log_timeout)); // Drop, since timeout should never fail.
 
-                let queue_size = self.log_queue.len();
-                debug!("FLUSH_LOG_QUEUE| Sending {} events to Kinesis.", queue_size);
+                debug!("FLUSH_LOG_QUEUE| Sending events to Kinesis. Log Queue: {:?}", self.log_queue);
                 self.kinesis_handler.send_events(self.log_queue.clone());
 
                 self.log_queue = Vec::new();
@@ -427,7 +428,7 @@ pub enum TraxiMessage {
     RetransmitLastSegment(Token),
 
     /// Append a byte-encoded, tab separated log string to the LogQueue.
-    AppendToLogQueue((String, Vec<u8>)),
+    AppendToLogQueue(LogEntry),
 
     /// Write the SessionMap to disk.
     DumpSessionMap,
