@@ -24,8 +24,8 @@ pub fn handle_read_tcp<T: Environment>(
     packet: &[u8],
     packet_type: TCP,
     mut event_loop: &mut EventLoop<TraxiTunnel<T>>,
-    mut sessions: &mut SessionMap,
-    mut environment: &mut T,
+    sessions: &mut SessionMap,
+    environment: &mut T,
     token: Token,
     ) -> Result<Token> {
     let ip_header = try!(Ipv4Packet::new(&packet[..20])
@@ -252,7 +252,7 @@ pub fn handle_read_tcp<T: Environment>(
 
 pub fn handle_write_tcp(
     packet: TCP,
-    mut sessions: &mut SessionMap,
+    sessions: &mut SessionMap,
     token: Token
     ) -> Result<Vec<u8>> {
 
@@ -323,8 +323,8 @@ fn is_domain (hostname: &str) -> bool {
 
 fn handle_connect<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(
     payload: Vec<u8>,
-    mut session: &mut TCPSession,
-    mut event_loop: &mut EventLoop<H>,
+    session: &mut TCPSession,
+    event_loop: &mut EventLoop<H>,
     token: Token,
     tcp_header: TcpPacket) -> result::Result<(), PacketError> {
 
@@ -405,7 +405,7 @@ fn handle_connect<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(
 }
 
 fn handle_data<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>
-    (payload: Vec<u8>, mut session: &mut TCPSession, mut event_loop: &mut EventLoop<H>, token: Token, tcp_header: TcpPacket) {
+    (payload: Vec<u8>, session: &mut TCPSession, mut event_loop: &mut EventLoop<H>, token: Token, tcp_header: TcpPacket) {
     let payload_length = payload.len() as u32;
     let sequence_number = session.sequence_number;
     debug!("TUNNEL E {} DATA| READ {}. SEQ: {} - ACK: {}.", token.as_usize(), payload_length, session.sequence_number, session.acknowledgement_number);
@@ -444,7 +444,7 @@ fn handle_data<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>
 }
 
 fn handle_ack<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(
-    mut session: &mut TCPSession, mut event_loop: &mut EventLoop<H>, token: Token, tcp_header: TcpPacket) {
+    session: &mut TCPSession, mut event_loop: &mut EventLoop<H>, token: Token, tcp_header: TcpPacket) {
     let packet_acknowledgement = tcp_header.get_acknowledgement();
     debug!("TUNNEL E {} ACK| READ ACK. SEQ: {} - ACK: {} - UNA {} - SEG.ACK {}",
            token.as_usize(), session.sequence_number, session.acknowledgement_number, session.unacknowledged, packet_acknowledgement);

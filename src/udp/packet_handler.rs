@@ -11,8 +11,8 @@ use pnet::packet::Packet;
 
 pub fn handle_write_udp<T: Environment>(
     data: Vec<u8>,
-    mut sessions: &mut UDPSessionMap,
-    mut event_loop: &mut EventLoop<TraxiTunnel<T>>,
+    sessions: &mut UDPSessionMap,
+    event_loop: &mut EventLoop<TraxiTunnel<T>>,
     token: Token,) -> Result<Vec<u8>> 
 {
     // Fetch session from map.
@@ -38,8 +38,8 @@ pub fn handle_read_udp<T: Environment>(
     data: Vec<u8>,
     environment: &mut T,
     token: Token,
-    mut event_loop: &mut EventLoop<TraxiTunnel<T>>,
-    mut sessions: &mut UDPSessionMap) -> Result<Token> 
+    event_loop: &mut EventLoop<TraxiTunnel<T>>,
+    sessions: &mut UDPSessionMap) -> Result<Token> 
 {
     if sessions.get(&token).is_none() {
         let session:UDPSession = try!(UDPSession::new(packet, environment, token.clone()));

@@ -71,7 +71,7 @@ pub const TUNNEL:Token = Token(0);
 
 /// Run the Event Loop once to respond to activity on the watched file descriptors. Print out a
 /// nice message to tell everyone what's going on.
-pub fn spin_loop<T: Environment>(test_event_loop: &mut EventLoop<TraxiTunnel<T>>, mut test_traxi_tunnel: &mut TraxiTunnel<T>, message: &str) {
+pub fn spin_loop<T: Environment>(test_event_loop: &mut EventLoop<TraxiTunnel<T>>, test_traxi_tunnel: &mut TraxiTunnel<T>, message: &str) {
     use ansi_term::Colour::Green;
     debug!("{}", Green.paint(message));
     test_event_loop.run_once(test_traxi_tunnel, Some(Duration::from_millis(100))).unwrap();

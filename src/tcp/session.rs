@@ -517,7 +517,7 @@ impl TCPSession {
     }
 
     // TODO: Handle HUP?
-    pub fn reregister<H: Handler<Message = TraxiMessage>>(&mut self, mut event_loop: &mut EventLoop<H>) -> Result<()> {
+    pub fn reregister<H: Handler<Message = TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
         // Only register for new reads if the read queue isn't excessively large.
         if self.read_queue.len() < 10 {
             debug!("REREGISTER {}| Registering for reads again.", self.token.as_usize());

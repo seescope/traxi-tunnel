@@ -113,7 +113,7 @@ impl<T: Environment> TraxiTunnel<T> {
     }
 
     /// The tunnel file descriptor is ready to receive data from the device.
-    pub fn readable(&mut self, mut event_loop: &mut EventLoop<TraxiTunnel<T>>) -> Result<()> {
+    pub fn readable(&mut self, event_loop: &mut EventLoop<TraxiTunnel<T>>) -> Result<()> {
         // Prepare a buffer to read the data.
         let mut buf = self.mut_buf.take().unwrap_or(ByteBuf::mut_with_capacity(4068));
         buf.clear();
@@ -355,7 +355,7 @@ impl<T: Environment> Handler for TraxiTunnel<T> {
 
     fn timeout(&mut self, event_loop: &mut EventLoop<TraxiTunnel<T>>, msg: TraxiMessage) {
         match msg {
-            /// A session has timed out from inactivity.
+            // A session has timed out from inactivity.
             TraxiMessage::CloseTCPSession(token) => {
                 match self.tcp_sessions.remove(&token) {
                     Some(_) =>    debug!("TIMEOUT {}| Successfully removed TCP session.", token.as_usize()),
