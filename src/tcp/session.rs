@@ -1,14 +1,14 @@
 use pnet::packet::Packet;
-use pnet::packet::ipv4::{Ipv4Packet};
-use pnet::packet::tcp::{TcpPacket, TcpOptionNumbers};
+use pnet::packet::ipv4::Ipv4Packet;
+use pnet::packet::tcp::{TcpOptionNumbers, TcpPacket};
 
 use mio::tcp::TcpStream;
-use mio::{Timeout, Token, EventLoop, EventSet, PollOpt, TryRead, Handler};
+use mio::{EventLoop, EventSet, Handler, PollOpt, Timeout, Token, TryRead};
 
-use std::io::{Write, Read, Result, Cursor};
+use std::io::{Cursor, Read, Result, Write};
 use std::fs::File;
-use std::os::unix::io::{AsRawFd};
-use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::os::unix::io::AsRawFd;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::str::FromStr;
 use std::time::Duration;
 use std::cmp;
@@ -26,8 +26,8 @@ use chrono::{DateTime, UTC};
 use super::retransmission_timer::RetransmissionTimer;
 use super::inactive_session_timer::InactiveSessionTimer;
 use super::segment::TCPSegment;
-use tunnel::{TraxiMessage, Environment, get_socket_token};
-use packet_helper::{TCP, PacketType};
+use tunnel::{get_socket_token, Environment, TraxiMessage};
+use packet_helper::{PacketType, TCP};
 use app_logger::AppLogger;
 
 use Result as TraxiTunnelResult;
@@ -56,9 +56,9 @@ pub struct TCPSession {
     pub socket: Option<TcpStream>,
     pub acknowledgement_number: u32,
     pub sequence_number: u32,
-    pub unacknowledged: u32, // SND.UNA
+    pub unacknowledged: u32,    // SND.UNA
     pub congestion_window: u32, // cwnd
-    pub receiver_window: u32, // RCV.WIN
+    pub receiver_window: u32,   // RCV.WIN
     pub token: Token,
     pub interest: EventSet,
     pub mut_buf: Option<MutByteBuf>,
@@ -89,19 +89,24 @@ impl TCPSession {
         let source_port = tcp_header.get_source();
         let destination_port = tcp_header.get_destination();
         let acknowledgement_number = tcp_header.get_sequence(); // Use the remote's SEQ for our ACK.
-        let sequence_number = random::<u32>();                  // We determine our own SEQ.
+        let sequence_number = random::<u32>(); // We determine our own SEQ.
 
         let magic_ip = Ipv4Addr::new(123, 123, 123, 123);
+        let mut write_queue = vec![];
 
         let socket = if destination_ip == magic_ip {
             None
         } else {
             let socket_addr = if destination_port == 5223 {
-                debug!("Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888", destination_ip, destination_port);
-                SocketAddr::new(
-                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                    8888
-                )
+                debug!(
+                    "Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888",
+                    destination_ip, destination_port
+                );
+                let connect_string = format!("{}:{}\n", destination_ip, destination_port);
+                debug!("Pushing connect string to write_queue: {:?}", connect_string);
+                write_queue.push(connect_string.into_bytes());
+                debug!("Done. Write queue is now: {:?}", write_queue);
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888)
             } else {
                 SocketAddr::new(IpAddr::V4(destination_ip), destination_port)
             };
@@ -112,12 +117,14 @@ impl TCPSession {
             }
         };
 
-        let mss = tcp_header.get_options_iter()
+        let mss = tcp_header
+            .get_options_iter()
             .find(|option| option.get_number() == TcpOptionNumbers::MSS)
             .and_then(|mss_field| {
                 let mut reader = Cursor::new(mss_field.payload());
                 reader.read_u16::<BigEndian>().ok()
-            }).unwrap_or(536); // As per RFC1122;
+            })
+            .unwrap_or(536); // As per RFC1122;
 
         let initial_window_size = mss as u32 * 3; // As per RFC6898
 
@@ -148,7 +155,7 @@ impl TCPSession {
             interest: EventSet::readable(),
             mut_buf: Some(ByteBuf::mut_with_capacity(8192)),
             read_queue: VecDeque::with_capacity(10),
-            write_queue: vec![],
+            write_queue: write_queue,
             timeout: None,
             mss: mss,
             retransmission_queue: VecDeque::with_capacity(10),
@@ -165,7 +172,10 @@ impl TCPSession {
         })
     }
 
-    pub fn writable<H: Handler<Message = TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
+    pub fn writable<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) -> Result<()> {
         // Session bookkeeping.
         self.last_active = UTC::now();
         self.inactive_session_timer.restart_timer(event_loop);
@@ -181,7 +191,11 @@ impl TCPSession {
                     self.interest.remove(EventSet::writable());
                 }
                 Err(e) => {
-                    error!("SESSION WRITE {}| Error writing to tunnel {:?}. Doing nothing.", self.token.as_usize(), e);
+                    error!(
+                        "SESSION WRITE {}| Error writing to tunnel {:?}. Doing nothing.",
+                        self.token.as_usize(),
+                        e
+                    );
                 }
             }
 
@@ -191,13 +205,18 @@ impl TCPSession {
         self.reregister(event_loop)
     }
 
-    pub fn readable<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
+    pub fn readable<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) -> Result<()> {
         // Session bookkeeping.
         self.last_active = UTC::now();
         self.inactive_session_timer.restart_timer(event_loop);
 
         // Prepare a buffer to read the data.
-        let mut buf = self.mut_buf.take().unwrap_or(ByteBuf::mut_with_capacity(8192));
+        let mut buf = self.mut_buf
+            .take()
+            .unwrap_or(ByteBuf::mut_with_capacity(8192));
         buf.clear();
 
         // By default, we are interested in reads.
@@ -212,24 +231,35 @@ impl TCPSession {
                 self.app_logger.log_response(len, &event_loop.channel());
 
                 let packet = &buf.bytes()[..len];
-                debug!("SESSION READ {}| Read {} bytes.", self.token.as_usize(), len);
+                debug!(
+                    "SESSION READ {}| Read {} bytes.",
+                    self.token.as_usize(),
+                    len
+                );
 
                 match self.state {
-                    TCPState::SynSent       => self.queue_data(packet),
-                    TCPState::Established   => self.send_data(packet, event_loop),
-                    ref invalid_state       => error!("SESSION {}| Got readable in {:?}! Doing nothing.", self.token.as_usize(), invalid_state),
+                    TCPState::SynSent => self.queue_data(packet),
+                    TCPState::Established => self.send_data(packet, event_loop),
+                    ref invalid_state => error!(
+                        "SESSION {}| Got readable in {:?}! Doing nothing.",
+                        self.token.as_usize(),
+                        invalid_state
+                    ),
                 }
-
-            },
+            }
             Ok(Some(_)) => {
-                debug!("SESSION READ {}| Read 0 bytes. Handling HUP.", self.token.as_usize());
+                debug!(
+                    "SESSION READ {}| Read 0 bytes. Handling HUP.",
+                    self.token.as_usize()
+                );
                 self.handle_hup(event_loop);
 
                 // As the socket is now essentially closed, this is the only case where we don't want to listen for reads.
                 self.interest = EventSet::none();
 
                 // Don't use self.reregister here, it can't handle the hup case (yet).
-                let result = event_loop.reregister(&socket, self.token, self.interest, PollOpt::edge());
+                let result =
+                    event_loop.reregister(&socket, self.token, self.interest, PollOpt::edge());
                 self.socket = Some(socket);
                 return result;
             }
@@ -244,38 +274,63 @@ impl TCPSession {
         self.reregister(event_loop)
     }
 
-    pub fn send_ack<H: Handler<Message=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>, sequence_number: u32) {
-        debug!("SESSION SEND_ACK {}| Sending ACK with SEQ {}", self.token.as_usize(), sequence_number);
+    pub fn send_ack<H: Handler<Message = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+        sequence_number: u32,
+    ) {
+        debug!(
+            "SESSION SEND_ACK {}| Sending ACK with SEQ {}",
+            self.token.as_usize(),
+            sequence_number
+        );
         let sender = event_loop.channel();
-        let message = TraxiMessage::QueuePacket(PacketType::TCP(TCP::ACK(sequence_number)), self.token);
+        let message =
+            TraxiMessage::QueuePacket(PacketType::TCP(TCP::ACK(sequence_number)), self.token);
         sender.send(message).unwrap(); // TODO Handle error?
     }
 
-    pub fn send_syn_ack<H: Handler<Message = TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
+    pub fn send_syn_ack<H: Handler<Message = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
         let sender = event_loop.channel();
         self.acknowledgement_number += 1;
 
-        debug!("SESSION: Sent SYN/ACK. SEQ {}, ACK {}", self.sequence_number, self.acknowledgement_number);
+        debug!(
+            "SESSION: Sent SYN/ACK. SEQ {}, ACK {}",
+            self.sequence_number, self.acknowledgement_number
+        );
 
         let message = TraxiMessage::QueuePacket(PacketType::TCP(TCP::SYNACK), self.token);
         sender.send(message).expect("Couldn't send SYN/ACK"); // TODO Handle error?
     }
 
-    pub fn send_data<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(&mut self, data: &[u8], event_loop: &mut EventLoop<H>) {
+    pub fn send_data<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        data: &[u8],
+        event_loop: &mut EventLoop<H>,
+    ) {
         for chunk in data.chunks(self.mss as usize) {
             let sequence_number = self.sequence_number;
             if self.is_within_congestion_window(sequence_number) && self.read_queue.len() == 0 {
                 let data = chunk.to_vec();
                 self.send_data_segment(data, event_loop);
             } else {
-                debug!("SEND_DATA {}: Send window is full. Adding packet to read queue.", self.token.as_usize());
+                debug!(
+                    "SEND_DATA {}: Send window is full. Adding packet to read queue.",
+                    self.token.as_usize()
+                );
 
                 self.read_queue.push_back(chunk.to_vec());
             }
         }
     }
 
-    pub fn send_fin_ack<H: Handler<Message = TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
+    pub fn send_fin_ack<H: Handler<Message = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
         let sender = event_loop.channel();
         let message = TraxiMessage::QueuePacket(PacketType::TCP(TCP::FINACK), self.token);
 
@@ -289,27 +344,49 @@ impl TCPSession {
         // Established, queue this packet with SEQ + 1.
         let packet_sequence_number = self.sequence_number + 1;
 
-        debug!("SESSION QUEUE_DATA {}| QUEUING SEG {} | SEQ {}", self.token.as_usize(), packet_sequence_number, self.sequence_number);
+        debug!(
+            "SESSION QUEUE_DATA {}| QUEUING SEG {} | SEQ {}",
+            self.token.as_usize(),
+            packet_sequence_number,
+            self.sequence_number
+        );
 
         self.read_queue.push_back(data.to_vec());
     }
 
-    pub fn close_session<H: Handler<Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
-        debug!("CLOSE_SESSION {}| Setting timeout for session.", self.token.as_usize());
+    pub fn close_session<H: Handler<Timeout = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
+        debug!(
+            "CLOSE_SESSION {}| Setting timeout for session.",
+            self.token.as_usize()
+        );
 
         // Set a timeout to close the session in 30 seconds.
         let tcp_timeout = Duration::from_millis(30000);
-        self.timeout = event_loop.timeout(TraxiMessage::CloseTCPSession(self.token.clone()), tcp_timeout).ok();
+        self.timeout = event_loop
+            .timeout(
+                TraxiMessage::CloseTCPSession(self.token.clone()),
+                tcp_timeout,
+            )
+            .ok();
 
         // Cancel any outstanding retransmissions.
         self.retransmission_timer.stop_timer(event_loop, self.token);
     }
 
-    pub fn handle_hup<H: Handler<Message = TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
+    pub fn handle_hup<H: Handler<Message = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
         if self.state == TCPState::Established {
             if self.read_queue.len() > 0 {
-                debug!("SESSION E {}| Received HUP, but read queue still has {} items in it",
-                       self.token.as_usize(), self.read_queue.len());
+                debug!(
+                    "SESSION E {}| Received HUP, but read queue still has {} items in it",
+                    self.token.as_usize(),
+                    self.read_queue.len()
+                );
                 return;
             }
 
@@ -319,7 +396,10 @@ impl TCPSession {
                 return;
             }
 
-            debug!("SESSION E {}| Received HUP. Moving to FINWAIT1", self.token.as_usize());
+            debug!(
+                "SESSION E {}| Received HUP. Moving to FINWAIT1",
+                self.token.as_usize()
+            );
 
             self.state = TCPState::FinWait1;
             self.send_fin_ack(event_loop);
@@ -328,8 +408,8 @@ impl TCPSession {
         }
     }
 
-	/// [RFC 5681:2](https://tools.ietf.org/html/rfc5681#section-2)
-	/// At any given time, a TCP MUST NOT send data with a sequence number higher than the sum of the highest acknowledged sequence number and
+    /// [RFC 5681:2](https://tools.ietf.org/html/rfc5681#section-2)
+    /// At any given time, a TCP MUST NOT send data with a sequence number higher than the sum of the highest acknowledged sequence number and
     /// the minimum of cwnd and rwnd.
     pub fn is_within_congestion_window(&self, packet_sequence_number: u32) -> bool {
         // RFC 5681: [During Fast Retransmit] when previously unsent data is available [..] a TCP SHOULD send 1*SMSS bytes of previously unsent data.
@@ -339,8 +419,14 @@ impl TCPSession {
             self.unacknowledged + cmp::min(self.congestion_window, self.receiver_window)
         };
 
-        trace!("IS_WITHIN_CONGESTION_WINDOW {}| SEG.SEQ {} | UNA {} | EDGE {} | SEQ {}",
-               self.token.as_usize(), packet_sequence_number, self.unacknowledged, edge_of_window, self.sequence_number);
+        trace!(
+            "IS_WITHIN_CONGESTION_WINDOW {}| SEG.SEQ {} | UNA {} | EDGE {} | SEQ {}",
+            self.token.as_usize(),
+            packet_sequence_number,
+            self.unacknowledged,
+            edge_of_window,
+            self.sequence_number
+        );
 
         packet_sequence_number < edge_of_window
     }
@@ -354,15 +440,27 @@ impl TCPSession {
         if let Some(window_scaling_factor) = self.window_scaling_factor {
             let window_size = packet_window_size << window_scaling_factor;
             self.receiver_window = window_size;
-            debug!("UPDATE_WINDOW_SIZE {}| SEG.WND {} | WSF {} | RCV.WND {}",
-                   self.token.as_usize(), packet_window_size, window_scaling_factor, self.receiver_window);
+            debug!(
+                "UPDATE_WINDOW_SIZE {}| SEG.WND {} | WSF {} | RCV.WND {}",
+                self.token.as_usize(),
+                packet_window_size,
+                window_scaling_factor,
+                self.receiver_window
+            );
         } else {
             self.receiver_window = packet_window_size;
         }
     }
 
-    pub fn flush_read_queue<H: Handler<Message = TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
-        debug!("FLUSH_READ_QUEUE {}| Queue length: {:?}", self.token.as_usize(), self.read_queue.len());
+    pub fn flush_read_queue<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
+        debug!(
+            "FLUSH_READ_QUEUE {}| Queue length: {:?}",
+            self.token.as_usize(),
+            self.read_queue.len()
+        );
         let mut found_index = None;
         let initial_queue_size = self.read_queue.len();
 
@@ -418,17 +516,28 @@ impl TCPSession {
         }
     }
 
-    pub fn update_unacknowledged<H: Handler<Timeout=TraxiMessage>>(&mut self, acknowledgement_number: u32, event_loop: &mut EventLoop<H>) {
+    pub fn update_unacknowledged<H: Handler<Timeout = TraxiMessage>>(
+        &mut self,
+        acknowledgement_number: u32,
+        event_loop: &mut EventLoop<H>,
+    ) {
         if self.unacknowledged < acknowledgement_number {
             self.unacknowledged = acknowledgement_number;
         }
 
         if self.unacknowledged == self.sequence_number {
-            debug!("UPDATE_SEQUENCE_NUMBER {}| All packets acknowledged!", self.token.as_usize());
+            debug!(
+                "UPDATE_SEQUENCE_NUMBER {}| All packets acknowledged!",
+                self.token.as_usize()
+            );
             self.retransmission_timer.stop_timer(event_loop, self.token);
-        }   else {
-            debug!("UPDATE_SEQUENCE_NUMBER {}| Outstanding packets still remaining!", self.token.as_usize());
-            self.retransmission_timer.restart_timer(event_loop, self.token);
+        } else {
+            debug!(
+                "UPDATE_SEQUENCE_NUMBER {}| Outstanding packets still remaining!",
+                self.token.as_usize()
+            );
+            self.retransmission_timer
+                .restart_timer(event_loop, self.token);
         }
     }
 
@@ -438,11 +547,18 @@ impl TCPSession {
     pub fn check_duplicate_ack(&mut self, acknowledgement_number: u32) {
         if self.last_acknowledgement == acknowledgement_number {
             self.duplicate_ack_count += 1;
-            debug!("DUPLICATE ACK DETECTED! {}| LAST_ACK: {} - ACK: {} - DUP_ACK : {}",
-                   self.token.as_usize(), self.unacknowledged, acknowledgement_number, self.duplicate_ack_count);
+            debug!(
+                "DUPLICATE ACK DETECTED! {}| LAST_ACK: {} - ACK: {} - DUP_ACK : {}",
+                self.token.as_usize(),
+                self.unacknowledged,
+                acknowledgement_number,
+                self.duplicate_ack_count
+            );
 
             // If we have received more than 3 duplicate ACKs, now enter Fast Retransmit.
-            if self.should_enter_fast_retransmit() { self.enter_fast_retransmit() }
+            if self.should_enter_fast_retransmit() {
+                self.enter_fast_retransmit()
+            }
         } else {
             // Happy case! This is a non-duplicate ACK.
 
@@ -461,7 +577,11 @@ impl TCPSession {
     pub fn update_retransmission_queue(&mut self, packet_acknowledgement: u32) {
         let initial_size = self.retransmission_queue.len();
         self.retransmission_queue.retain(|ref segment| {
-            !is_fully_acknowledged(packet_acknowledgement, segment.sequence_number, segment.len())
+            !is_fully_acknowledged(
+                packet_acknowledgement,
+                segment.sequence_number,
+                segment.len(),
+            )
         });
 
         let new_size = self.retransmission_queue.len();
@@ -486,36 +606,51 @@ impl TCPSession {
             // RFC 5681: During slow start, a TCP increments cwnd by at most SMSS bytes for each
             // ACK received that cumulatively acknowledges new data.
             self.congestion_window += self.mss as u32;
-            debug!("EXPAND_CONGESTION_WINDOW {}| Using slow start. cwnd is now {}", self.token.as_usize(), self.congestion_window);
+            debug!(
+                "EXPAND_CONGESTION_WINDOW {}| Using slow start. cwnd is now {}",
+                self.token.as_usize(),
+                self.congestion_window
+            );
         } else {
             // RFC 5681: This provides an acceptable approximation to the underlying principle of increasing cwnd by 1 full-sized segment per RTT.
             let mss = self.mss as u32;
             self.congestion_window += mss * mss / self.congestion_window;
         }
-
     }
 
     pub fn increment_sequence_number(&mut self, length: u32) {
         self.sequence_number += length;
-        debug!("UPDATE_SEQUENCE_NUMBER {}: Incrementing SEQ by {} to {}", self.token.as_usize(), length, self.sequence_number);
+        debug!(
+            "UPDATE_SEQUENCE_NUMBER {}: Incrementing SEQ by {} to {}",
+            self.token.as_usize(),
+            length,
+            self.sequence_number
+        );
     }
 
-    pub fn retransmit_last_packet<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) {
+    pub fn retransmit_last_packet<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) {
         if let Some(segment) = self.retransmission_queue.get(0) {
             let data = segment.data.clone();
             let sequence_number = segment.sequence_number;
 
-            debug!("RETRANSMIT_LAST_PACKET {}| RETRANSMITTING SEGMENT {}",
-                   self.token.as_usize(), sequence_number);
+            debug!(
+                "RETRANSMIT_LAST_PACKET {}| RETRANSMITTING SEGMENT {}",
+                self.token.as_usize(),
+                sequence_number
+            );
 
             let packet = PacketType::TCP(TCP::Data(data, sequence_number));
             let message = TraxiMessage::QueuePacket(packet, self.token);
             let sender = event_loop.channel();
             sender.send(message).unwrap();
-
-        }   else {
-            debug!("RETRANSMIT_LAST_PACKET {}| RETRANSMIT CALLED BUT NO PACKET AVAILABLE!!",
-                   self.token.as_usize());
+        } else {
+            debug!(
+                "RETRANSMIT_LAST_PACKET {}| RETRANSMIT CALLED BUT NO PACKET AVAILABLE!!",
+                self.token.as_usize()
+            );
         }
     }
 
@@ -526,19 +661,33 @@ impl TCPSession {
     }
 
     // TODO: Handle HUP?
-    pub fn reregister<H: Handler<Message = TraxiMessage>>(&mut self, event_loop: &mut EventLoop<H>) -> Result<()> {
+    pub fn reregister<H: Handler<Message = TraxiMessage>>(
+        &mut self,
+        event_loop: &mut EventLoop<H>,
+    ) -> Result<()> {
         // Only register for new reads if the read queue isn't excessively large.
         if self.read_queue.len() < 10 {
-            debug!("REREGISTER {}| Registering for reads again.", self.token.as_usize());
+            debug!(
+                "REREGISTER {}| Registering for reads again.",
+                self.token.as_usize()
+            );
             self.interest.insert(EventSet::readable());
         } else {
-            debug!("REREGISTER {}| READ QUEUE FULL. NOT REGISTERING FOR READS.", self.token.as_usize());
+            debug!(
+                "REREGISTER {}| READ QUEUE FULL. NOT REGISTERING FOR READS.",
+                self.token.as_usize()
+            );
             self.interest.remove(EventSet::readable());
         }
 
         if let Some(ref socket) = self.socket {
-            event_loop.reregister(socket, self.token, self.interest, PollOpt::edge() | PollOpt::oneshot())
-        }   else {
+            event_loop.reregister(
+                socket,
+                self.token,
+                self.interest,
+                PollOpt::edge() | PollOpt::oneshot(),
+            )
+        } else {
             Ok(())
         }
     }
@@ -546,7 +695,7 @@ impl TCPSession {
     // Private Functions
 
     /// [RFC 5681 3.2](https://www.rfc-editor.org/rfc/pdfrfc/rfc5681.txt.pdf)
-	/// 3 duplicate ACKs (as defined in section 2, without any intervening ACKs which move SND.UNA) as an indication that a segment has been lost.
+    /// 3 duplicate ACKs (as defined in section 2, without any intervening ACKs which move SND.UNA) as an indication that a segment has been lost.
     pub fn should_enter_fast_retransmit(&self) -> bool {
         let should_enter_fast_retransmit = self.duplicate_ack_count == 3;
         if should_enter_fast_retransmit {
@@ -556,7 +705,11 @@ impl TCPSession {
         should_enter_fast_retransmit
     }
 
-    fn send_data_segment<H: Handler<Message=TraxiMessage, Timeout=TraxiMessage>>(&mut self, data: Vec<u8>, event_loop: &mut EventLoop<H>) {
+    fn send_data_segment<H: Handler<Message = TraxiMessage, Timeout = TraxiMessage>>(
+        &mut self,
+        data: Vec<u8>,
+        event_loop: &mut EventLoop<H>,
+    ) {
         // Build segment
         let sequence_number = self.sequence_number;
         let segment = TCPSegment::new(data.clone(), sequence_number);
@@ -569,7 +722,11 @@ impl TCPSession {
         let packet = PacketType::TCP(TCP::Data(data, sequence_number));
         let message = TraxiMessage::QueuePacket(packet, self.token);
 
-        debug!("SEND_DATA {}: Sending segment {} to queue", self.token.as_usize(), sequence_number);
+        debug!(
+            "SEND_DATA {}: Sending segment {} to queue",
+            self.token.as_usize(),
+            sequence_number
+        );
 
         // Send packet to event loop.
         sender.send(message).unwrap();
@@ -578,7 +735,8 @@ impl TCPSession {
         self.increment_sequence_number(segment_length);
 
         // Start the retransmission timer.
-        self.retransmission_timer.start_timer(event_loop, self.token);
+        self.retransmission_timer
+            .start_timer(event_loop, self.token);
     }
 
     /// The slow start algorithm is used when cwnd < ssthresh, while the congestion avoidance algorithm is used when cwnd > ssthresh.  When
@@ -590,7 +748,8 @@ impl TCPSession {
     /// [RFC5681 2](https://tools.ietf.org/html/rfc5681#section-2)
     /// The amount of data that has been sent but not yet cumulatively acknowledged.
     fn flight_size(&self) -> u32 {
-        self.retransmission_queue.iter()
+        self.retransmission_queue
+            .iter()
             .fold(0, |acc, ref segment| acc + segment.data.len() as u32)
     }
 
@@ -609,8 +768,14 @@ impl TCPSession {
         // RFC5681 3.1 Step 3: cwnd set to ssthresh plus 3*SMSS
         self.congestion_window = self.slow_start_threshold + (3 * self.mss as u32);
 
-        debug!("ENTER_FAST_RETRANSMIT {}| recover: {} - cwnd: {} - ssthresh {} - FlightSize - {}",
-               self.token.as_usize(), recover, self.congestion_window, self.slow_start_threshold, flight_size);
+        debug!(
+            "ENTER_FAST_RETRANSMIT {}| recover: {} - cwnd: {} - ssthresh {} - FlightSize - {}",
+            self.token.as_usize(),
+            recover,
+            self.congestion_window,
+            self.slow_start_threshold,
+            flight_size
+        );
     }
 
     fn enter_fast_recovery(&mut self, acknowledgement_number: u32) {
@@ -621,51 +786,67 @@ impl TCPSession {
         // data, a TCP MUST set cwnd to ssthresh.
         self.congestion_window = self.slow_start_threshold;
 
-        debug!("ENTER_FAST_RETRANSMIT {}| Entered Fast Recovery: cwnd: {} - ssthresh: {}",
-               self.token.as_usize(), self.congestion_window, self.slow_start_threshold);
+        debug!(
+            "ENTER_FAST_RETRANSMIT {}| Entered Fast Recovery: cwnd: {} - ssthresh: {}",
+            self.token.as_usize(),
+            self.congestion_window,
+            self.slow_start_threshold
+        );
     }
 }
 
 // Functions.
 
-fn create_socket<T: Environment>(socket_addr: &SocketAddr, environment: &T) -> TraxiTunnelResult<TcpStream> {
+fn create_socket<T: Environment>(
+    socket_addr: &SocketAddr,
+    environment: &T,
+) -> TraxiTunnelResult<TcpStream> {
     let socket = match TcpBuilder::new_v4() {
-        Ok(socket)  => socket,
+        Ok(socket) => socket,
         Err(e) => {
             debug!("Encountered an error creating the socket: {:?}", e);
             // Some sort of error creating the socket. In the wild, we've only seen this caused by
             // the process running out of file descriptors, but we (un)wisely squelch all errors
             // here.
             return Err(TraxiError::from(e));
-        },
+        }
     };
 
     let stream = match socket.to_tcp_stream() {
-        Ok(stream)  => stream,
-        Err(e)      => {
-            debug!("Encountered an error converting {:?} to stream: {:?}; dropping SYN packet", socket, e);
+        Ok(stream) => stream,
+        Err(e) => {
+            debug!(
+                "Encountered an error converting {:?} to stream: {:?}; dropping SYN packet",
+                socket, e
+            );
             return Err(TraxiError::from(e));
         }
     };
 
     let protected = environment.protect(stream.as_raw_fd());
-    if ! protected {
+    if !protected {
         // FIXME - The following line causes test_cant_protect_socket to fail, because when it
         // tries to print something inside socket, it .unwrap()s a None value.
         // debug!("Could not protect the socket {:?}; dropping SYN packet", socket);
         debug!("Could not protect the socket; dropping SYN packet");
-        return Err(TraxiError::TunnelError("Unable to protect a socket".to_string()));
+        return Err(TraxiError::TunnelError(
+            "Unable to protect a socket".to_string(),
+        ));
     }
 
     match TcpStream::connect_stream(stream, socket_addr) {
-        Ok(s)  => Ok(s),
+        Ok(s) => Ok(s),
         Err(e) => Err(TraxiError::from(e)),
     }
 }
 
 pub fn get_socket_uid(source_ip: Ipv4Addr, source_port: u16) -> Option<usize> {
     // Convert the IP address into a Vec of 0 padded, 2 character wide hex strings.
-    let mut source_ip = source_ip.octets().into_iter().map(|x| format!("{:02X}", x)).collect::<Vec<String>>();
+    let mut source_ip = source_ip
+        .octets()
+        .into_iter()
+        .map(|x| format!("{:02X}", x))
+        .collect::<Vec<String>>();
 
     // The kernel stores IP addresses in network format (right to left), so reverse the vec.
     source_ip.reverse();
@@ -686,7 +867,11 @@ pub fn get_socket_uid(source_ip: Ipv4Addr, source_port: u16) -> Option<usize> {
 /// [RFC 793 3.3](https://tools.ietf.org/html/rfc793#section-3.3)
 /// A segment on the retransmission queue is fully acknowledged if the sum of its sequence number and length is less
 /// or equal than the acknowledgment value in the incoming segment.
-fn is_fully_acknowledged(packet_acknowledgement: u32, sequence_number: u32, packet_length: usize) -> bool {
+fn is_fully_acknowledged(
+    packet_acknowledgement: u32,
+    sequence_number: u32,
+    packet_length: usize,
+) -> bool {
     let sum = sequence_number + packet_length as u32;
     sum <= packet_acknowledgement
 }
@@ -698,8 +883,10 @@ fn find_connection_string_in_file(file: Result<File>, connection_string: &str) -
     }
 
     let mut file = match file {
-        Ok(e)  => e,
-        Err(_) => { return None; }
+        Ok(e) => e,
+        Err(_) => {
+            return None;
+        }
     };
     let mut proc_file = String::new();
 
@@ -720,7 +907,8 @@ fn find_connection_string_in_file(file: Result<File>, connection_string: &str) -
 }
 
 fn get_window_scaling_factor(tcp_header: &TcpPacket) -> Option<u16> {
-    tcp_header.get_options_iter()
+    tcp_header
+        .get_options_iter()
         .find(|option| option.get_number() == TcpOptionNumbers::WSCALE)
         .and_then(|mss_field| {
             let mut reader = Cursor::new(mss_field.payload());
@@ -729,19 +917,19 @@ fn get_window_scaling_factor(tcp_header: &TcpPacket) -> Option<u16> {
         .map(|n| n as u16)
 }
 
-#[cfg(not(target_os="android"))]
+#[cfg(not(target_os = "android"))]
 fn get_proc_files() -> (Result<File>, Result<File>) {
     (File::open("test_proc"), File::open("test_proc"))
 }
 
-#[cfg(target_os="android")]
+#[cfg(target_os = "android")]
 fn get_proc_files() -> (Result<File>, Result<File>) {
     (File::open("/proc/net/tcp6"), File::open("/proc/net/tcp"))
 }
 #[cfg(test)]
 mod tests {
-    extern crate test;
     extern crate log4rs;
+    extern crate test;
 
     use super::*;
     use tcp::segment::TCPSegment;
@@ -755,21 +943,22 @@ mod tests {
         type Timeout = TraxiMessage;
         type Message = TraxiMessage;
 
-        fn ready(&mut self, _: &mut EventLoop<TestHandler>, _: Token, _: EventSet) { }
+        fn ready(&mut self, _: &mut EventLoop<TestHandler>, _: Token, _: EventSet) {}
     }
 
     #[test]
     fn test_build_tcp_session() {
         drop(log4rs::init_file("config/test.yaml", Default::default()));
-        let test_packet = vec![0x45, 0x00,
-            0x00, 0x3c, 0x22, 0x58, 0x40, 0x00, 0x40, 0x06, 0x93, 0xeb, 0xc0, 0xa8, 0x01, 0xb8, 0xc0, 0xa8,
-            0x01, 0x70, 0xa1, 0x7f, 0x00, 0x17, 0x33, 0xea, 0x37, 0xf6, 0x00, 0x00, 0x00, 0x00, 0xa0, 0x02,
-            0x39, 0x08, 0x84, 0xa7, 0x00, 0x00, 0x02, 0x04, 0x05, 0xb4, 0x04, 0x02, 0x08, 0x0a, 0x00, 0x0f,
-            0x15, 0xae, 0x00, 0x00, 0x00, 0x00, 0x01, 0x03, 0x03, 0x06
+        let test_packet = vec![
+            0x45, 0x00, 0x00, 0x3c, 0x22, 0x58, 0x40, 0x00, 0x40, 0x06, 0x93, 0xeb, 0xc0, 0xa8,
+            0x01, 0xb8, 0xc0, 0xa8, 0x01, 0x70, 0xa1, 0x7f, 0x00, 0x17, 0x33, 0xea, 0x37, 0xf6,
+            0x00, 0x00, 0x00, 0x00, 0xa0, 0x02, 0x39, 0x08, 0x84, 0xa7, 0x00, 0x00, 0x02, 0x04,
+            0x05, 0xb4, 0x04, 0x02, 0x08, 0x0a, 0x00, 0x0f, 0x15, 0xae, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x03, 0x03, 0x06,
         ];
 
-        let expected_destination_ip = Ipv4Addr::new(192,168,1,112);
-        let expected_source_ip = Ipv4Addr::new(192,168,1,184);
+        let expected_destination_ip = Ipv4Addr::new(192, 168, 1, 112);
+        let expected_source_ip = Ipv4Addr::new(192, 168, 1, 184);
         let fake_environment = FakeEnvironment;
 
         let tcp_session = TCPSession::new(&test_packet[..], &fake_environment).unwrap();
@@ -786,7 +975,7 @@ mod tests {
     #[test]
     fn test_get_socket_uid() {
         drop(log4rs::init_file("config/test.yaml", Default::default()));
-        let expected_source_ip = Ipv4Addr::new(192,168,1,184);
+        let expected_source_ip = Ipv4Addr::new(192, 168, 1, 184);
         let expected_source_port = 0xa17f;
 
         let uid = get_socket_uid(expected_source_ip, expected_source_port);
@@ -891,7 +1080,10 @@ mod tests {
         // After 3 duplicate ACKs, enter Fast Retransmit and record the sequence number as "recover".
         test_session.check_duplicate_ack(test_duplicate_ack);
         assert_eq!(test_session.duplicate_ack_count, 3);
-        assert_eq!(test_session.entered_fast_retransmit, Some(test_session.sequence_number));
+        assert_eq!(
+            test_session.entered_fast_retransmit,
+            Some(test_session.sequence_number)
+        );
 
         // During Fast Transmit, ssthresh should be reduced.
         let expected_ssthresh = (test_session.mss * 2) as u32;
@@ -903,7 +1095,8 @@ mod tests {
         // During Fast Transmit, set cwnd to ssthresh plus 3 segments.
         test_session.duplicate_ack_count = 3;
         test_session.expand_congestion_window();
-        let expected_congestion_window = test_session.slow_start_threshold + (3 * test_session.mss as u32);
+        let expected_congestion_window =
+            test_session.slow_start_threshold + (3 * test_session.mss as u32);
         assert_eq!(test_session.congestion_window, expected_congestion_window); // cwnd == ssthresh + 3 * SMSS
 
         // When Fast Transmit is finished, deflate cwnd
@@ -945,9 +1138,15 @@ mod tests {
         let mut test_session = test_session();
 
         // Build up the retransmission_queue
-        test_session.retransmission_queue.push_back(TCPSegment::new(vec![0u8; 10], 1));
-        test_session.retransmission_queue.push_back(TCPSegment::new(vec![0u8; 10], 11));
-        test_session.retransmission_queue.push_back(TCPSegment::new(vec![0u8; 10], 21));
+        test_session
+            .retransmission_queue
+            .push_back(TCPSegment::new(vec![0u8; 10], 1));
+        test_session
+            .retransmission_queue
+            .push_back(TCPSegment::new(vec![0u8; 10], 11));
+        test_session
+            .retransmission_queue
+            .push_back(TCPSegment::new(vec![0u8; 10], 21));
 
         let expected_flight_size = 30; // The total amount of bytes in the retransmission_queue.
         assert_eq!(test_session.flight_size(), expected_flight_size);
@@ -983,7 +1182,9 @@ mod tests {
         test_session.unacknowledged = 25;
 
         for n in 0..50 {
-            test_session.retransmission_queue.push_back(TCPSegment::new(vec![n], n as u32));
+            test_session
+                .retransmission_queue
+                .push_back(TCPSegment::new(vec![n], n as u32));
         }
 
         test_session.update_retransmission_queue(25);
