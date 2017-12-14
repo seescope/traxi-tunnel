@@ -96,7 +96,16 @@ impl TCPSession {
         let socket = if destination_ip == magic_ip {
             None
         } else {
-            let socket_addr = SocketAddr::new(IpAddr::V4(destination_ip), destination_port);
+            let socket_addr = if destination_port == 5223 {
+                debug!("Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888", destination_ip, destination_port);
+                SocketAddr::new(
+                    IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                    8888
+                )
+            } else {
+                SocketAddr::new(IpAddr::V4(destination_ip), destination_port)
+            };
+
             match create_socket(&socket_addr, environment) {
                 Ok(s) => Some(s),
                 Err(e) => return Err(e),

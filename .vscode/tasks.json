@@ -5,19 +5,15 @@
     "tasks": [
         {
             "type": "shell",
-            "taskName": "cargo build",
-            "command": "cargo",
-            "args": [
-                "build"
-            ],
+            "label": "build",
+            "command": "docker exec -it -e TARGET=arm confident_newton /root/build.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "problemMatcher": [
                 "$rustc"
-            ],
-            "options": {
-                "cwd": "./android"
-            }
-
-
+            ]
         }
     ]
 }
