@@ -72,6 +72,7 @@ pub fn handle_read_tcp<T: Environment>(
             );
 
             // If there's data ready to be written to the socket, let's register for writes as well.
+            // TODO: This should be cleaned up to use reregister: keep it DRY.
             let new_interest = if session.write_queue.len() > 0 {
                 EventSet::readable() | EventSet::writable()
             } else {
@@ -86,7 +87,6 @@ pub fn handle_read_tcp<T: Environment>(
                     PollOpt::edge() | PollOpt::oneshot()
                 ));
             }
-
 
             let uuid = environment.get_uuid(&ip_header.get_source());
             session.app_logger.uuid = uuid;

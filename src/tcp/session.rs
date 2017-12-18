@@ -102,9 +102,13 @@ impl TCPSession {
                     "Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888",
                     destination_ip, destination_port
                 );
+
                 let connect_string = format!("{}:{}\n", destination_ip, destination_port);
-                debug!("Pushing connect string to write_queue: {:?}", connect_string);
-                write_queue.push(connect_string.into_bytes());
+                debug!("Pushing connect string to write_queue: {}", connect_string);
+                let mut connect_string = connect_string.into_bytes();
+                connect_string.resize(22, 0);
+
+                write_queue.push(connect_string);
                 debug!("Done. Write queue is now: {:?}", write_queue);
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8888)
             } else {

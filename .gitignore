@@ -7,3 +7,4 @@
 Cargo.lock
 
 *_racertmp*
+*.log
