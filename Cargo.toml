@@ -24,10 +24,8 @@ httparse = "1.1"
 byteorder = "0.5.1"
 regex = "0.1"
 time = "0.1.35"
-csv = "0.14.4"
 hyper = "0.10"
 hyper-native-tls = "0.2"
-zip = "0.1"
 chrono = "^0.2.21"
 fnv = "1.0.5"
 rusoto_core = "0.26"
@@ -35,7 +33,7 @@ rusoto_kinesis = "0.26"
 rusoto_credential = "0.7"
 lazy_static = "0.2.8"
 itertools = "0.6.0"
-ssl-interceptor = { path = "./ssl-interceptor" }
+ssl-interceptor = {git = "ssh://git@github.com:22/traxicorp/ssl-interceptor"}
 
 [replace]
 "native-tls:0.1.4" = { git = "ssh://git@github.com:22/traxicorp/rust-native-tls" }

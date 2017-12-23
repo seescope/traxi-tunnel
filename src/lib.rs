@@ -15,7 +15,6 @@ extern crate bit_vec;
 extern crate byteorder;
 extern crate bytes;
 extern crate chrono;
-extern crate csv;
 extern crate fnv;
 extern crate httparse;
 extern crate hyper;
@@ -35,7 +34,6 @@ extern crate rusoto_kinesis;
 extern crate rustc_serialize;
 extern crate ssl_interceptor;
 extern crate time;
-extern crate zip;
 
 pub mod tunnel;
 pub mod packet_helper;
@@ -65,7 +63,6 @@ use nix::fcntl::{fcntl, O_NONBLOCK};
 use tunnel::{Environment, TraxiMessage, TraxiTunnel};
 use firebase_connector::{Firebase, FirebaseConnector};
 use rusoto_core::CredentialsError;
-use zip::result::ZipError;
 
 const TUNNEL: mio::Token = mio::Token(0);
 const IPC: mio::Token = mio::Token(1);
@@ -114,7 +111,6 @@ pub enum PacketError {
 #[derive(Debug)]
 pub enum TraxiError {
     Io(io::Error),
-    Zip(ZipError),
     CredentialsError(CredentialsError),
     PacketError(PacketError),
     IPCError(String),
@@ -125,12 +121,6 @@ pub enum TraxiError {
 impl From<io::Error> for TraxiError {
     fn from(err: io::Error) -> TraxiError {
         TraxiError::Io(err)
-    }
-}
-
-impl From<ZipError> for TraxiError {
-    fn from(err: ZipError) -> TraxiError {
-        TraxiError::Zip(err)
     }
 }
 

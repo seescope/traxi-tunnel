@@ -80,7 +80,11 @@ pub struct TCPSession {
 }
 
 impl TCPSession {
-    pub fn new<T: Environment>(packet: &[u8], environment: &T) -> TraxiTunnelResult<TCPSession> {
+    pub fn new<T: Environment>(
+        packet: &[u8],
+        environment: &mut T,
+    ) -> TraxiTunnelResult<TCPSession> {
+        let token = get_socket_token(packet);
         let ip_header = Ipv4Packet::new(&packet[..]).unwrap();
         let tcp_header = TcpPacket::new(&ip_header.payload()[..]).unwrap();
 
@@ -93,14 +97,18 @@ impl TCPSession {
 
         let magic_ip = Ipv4Addr::new(123, 123, 123, 123);
         let mut write_queue = vec![];
+        let app_id =
+            get_socket_uid(source_ip, source_port).map(|u| environment.get_package_name(u));
+
+        debug!("|{}| Got app_id {:?}", token.as_usize(), app_id);
 
         let socket = if destination_ip == magic_ip {
             None
         } else {
-            let socket_addr = if destination_port == 5223 {
+            let socket_addr = if is_kik(&app_id) {
                 debug!(
-                    "Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888",
-                    destination_ip, destination_port
+                    "Doing a crazy ass redirect for {}:{} to 127.0.0.1:8888 because App ID is {:?}",
+                    destination_ip, destination_port, app_id
                 );
 
                 let connect_string = format!("{}:{}\n", destination_ip, destination_port);
@@ -140,8 +148,8 @@ impl TCPSession {
             window
         };
 
-        let app_logger = AppLogger::new(destination_ip);
-        let token = get_socket_token(packet);
+        let mut app_logger = AppLogger::new(destination_ip);
+        app_logger.app_id = app_id;
 
         Ok(TCPSession {
             source_ip: source_ip,
@@ -919,6 +927,14 @@ fn get_window_scaling_factor(tcp_header: &TcpPacket) -> Option<u16> {
             reader.read_u8().ok()
         })
         .map(|n| n as u16)
+}
+
+fn is_kik(app_id: &Option<String>) -> bool {
+    if let &Some(ref id) = app_id {
+        return id == "kik.android";
+    }
+
+    false
 }
 
 #[cfg(not(target_os = "android"))]
